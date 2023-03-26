@@ -1,0 +1,43 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/nana/ROS/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/nana/ROS/src/depthimage_to_laserscan/include/**",
+        "/home/nana/ROS/src/kobuki/kobuki_auto_docking/include/**",
+        "/home/nana/ROS/src/kobuki/kobuki_bumper2pc/include/**",
+        "/home/nana/ROS/src/kobuki/kobuki_controller_tutorial/include/**",
+        "/home/nana/ROS/src/kobuki_desktop/kobuki_gazebo_plugins/include/**",
+        "/home/nana/ROS/src/kobuki/kobuki_keyop/include/**",
+        "/home/nana/ROS/src/kobuki/kobuki_node/include/**",
+        "/home/nana/ROS/src/kobuki/kobuki_random_walker/include/**",
+        "/home/nana/ROS/src/kobuki/kobuki_safety_controller/include/**",
+        "/home/nana/ROS/src/tf2/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_cmd_vel_mux/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_controllers/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_diff_drive_pose_controller/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_keyop/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_math_toolkit/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_navi_toolkit/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_navigator/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_safety_controller/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_velocity_smoother/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_virtual_sensor/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_waypoint_provider/include/**",
+        "/home/nana/ROS/src/yujin_ocs/yocs_waypoints_navi/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
