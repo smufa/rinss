@@ -16,9 +16,9 @@ find_package(OpenCV)
 
 add_message_files(DIRECTORY msg
 	FILES
-  	Face_and_pose.msg
-	FaceID_and_pose.msg
-	
+  	Face.msg
+	GreetingDelta.msg
+	Greet.msg
 )
 
 generate_messages(DEPENDENCIES 

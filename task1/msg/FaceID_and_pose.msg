@@ -1,3 +1,0 @@
-int8 id
-geometry_msgs/PoseStamped pose
-float32 distanceToFace

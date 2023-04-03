@@ -12,7 +12,7 @@ import tf2_ros
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import PointStamped, Vector3, Pose, Quaternion
 from cv_bridge import CvBridge, CvBridgeError
-from task1.msg import Face_and_pose
+from task1.msg import Face, GreetingDelta
 
 from tf.transformations import quaternion_from_euler
 
@@ -31,7 +31,10 @@ class face_localizer:
 
         # Publiser for the visualization markers
         self.face_pub = rospy.Publisher('captured_face', Image, queue_size=1000)
-        self.face_and_pose_pub = rospy.Publisher('face_and_pose', Face_and_pose, queue_size=1000)
+        self.face_and_pose_pub = rospy.Publisher('face_and_pose', Face, queue_size=1000)
+
+        # Publisher for greeting delta
+        self.greet_pub = rospy.Publisher('greeting_delta', GreetingDelta, queue_size=1000)
 
         # Object we use for transforming between coordinate frames
         self.tf_buf = tf2_ros.Buffer()
@@ -82,7 +85,7 @@ class face_localizer:
             print(e)
             pose = None
 
-        return pose
+        return pose, angle_to_target
     
     def find_faces(self):
 
@@ -150,13 +153,19 @@ class face_localizer:
             depth_time = depth_image_message.header.stamp
 
             # Find the location of the detected face
-            pose = self.get_pose((x1,x2,y1,y2), face_distance, depth_time)
+            pose, angle = self.get_pose((x1,x2,y1,y2), face_distance, depth_time)
 
             if pose is not None:
-                msg = Face_and_pose()
+                msg = GreetingDelta()
+                msg.angleToFace = angle
+                msg.distanceToFace = face_distance
+
+                self.greet_pub.publish(msg)
+
+                msg = Face()
+                msg.id = 0
                 msg.faceImage = face_image
                 msg.pose = pose
-                msg.distanceToFace = face_distance
 
                 self.face_and_pose_pub.publish(msg)
 

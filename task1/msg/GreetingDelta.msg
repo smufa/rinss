@@ -1,0 +1,2 @@
+float32 distanceToFace
+float32 angleToFace

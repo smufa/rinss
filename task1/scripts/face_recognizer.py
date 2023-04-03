@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import face_recognition
 
-from task1.msg import Face_and_pose, FaceID_and_pose
+from task1.msg import Greet, Face
 from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Pose, Vector3, PoseStamped
@@ -58,9 +58,9 @@ class face_recognizer:
     def __init__(self):
         rospy.init_node('face_recognizer', anonymous=True)
 
-        self.face_sub = rospy.Subscriber("face_and_pose", Face_and_pose, self.image_callback)
+        self.face_sub = rospy.Subscriber("face_and_pose", Face, self.image_callback)
         self.markers_pub = rospy.Publisher('face_markers', MarkerArray, queue_size=1000)
-        self.new_face_pub = rospy.Publisher('new_face_greet', FaceID_and_pose, queue_size=1000)
+        self.greet_pub = rospy.Publisher('greet', Greet, queue_size=1000)
 
         self.bridge = CvBridge()
 
@@ -97,14 +97,10 @@ class face_recognizer:
             self.known_faces.append(face_cluster(encoding, msg.pose))
             self.refresh_markers(len(self.known_faces)-1)
 
-            new_msg = FaceID_and_pose()
-            new_msg.id = len(self.known_faces)
-            ps = PoseStamped()
-            ps.header.frame_id = "map"
-            ps.pose = msg.pose
-            new_msg.pose = ps
-            new_msg.distanceToFace = msg.distanceToFace
-            self.new_face_pub.publish(new_msg)
+            msg = Greet()
+            msg.id = len(self.known_faces)
+            self.greet_pub.publish(msg)
+
 
     def add_marker(self, pose, index):
         new_marker = Marker()
