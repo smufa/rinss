@@ -9,7 +9,7 @@ from sensor_msgs.msg import Image
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import PointStamped, Vector3, Point, Pose
 from std_msgs.msg import ColorRGBA
-from task2.msg import Cylinder
+from task2.msg import ColorAndPose
 
 class cylinders:
     def __init__(self, color, pose):
@@ -77,7 +77,7 @@ class cylinder_recognizer:
         rospy.init_node('cylinder', anonymous=True)
 
         self.markers_pub = rospy.Publisher('cylinder_markers', MarkerArray, queue_size=1000)
-        self.cylinder_sub = rospy.Subscriber('cylinder_detected', Cylinder, self.cylinder_detected_callback)
+        self.cylinder_sub = rospy.Subscriber('cylinder_detected', ColorAndPose, self.cylinder_detected_callback)
         
         self.known_cylinders = []
         self.marker_array = MarkerArray()

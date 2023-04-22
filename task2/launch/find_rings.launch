@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+
+    <node pkg="task2" type="ring_segmentation" name="ring_segmentation">s
+        <remap from="input" to="/arm_camera/depth/points"/>
+    </node>
+
+</launch>

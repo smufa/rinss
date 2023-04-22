@@ -41,10 +41,10 @@ link_libraries(${Boost_LIBRARIES} ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
 add_message_files(DIRECTORY msg
 	FILES
-  	Face.msg
+  Face.msg
 	GreetingDelta.msg
 	Greet.msg
-	Cylinder.msg
+	ColorAndPose.msg
 )
 
 add_service_files(
@@ -80,5 +80,7 @@ catkin_package(
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
 add_executable(cylinder_segmentation src/cylinder_segmentation.cpp)
+add_executable(ring_segmentation src/ring_segmentation.cpp)
 target_link_libraries(cylinder_segmentation ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+target_link_libraries(ring_segmentation ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 
