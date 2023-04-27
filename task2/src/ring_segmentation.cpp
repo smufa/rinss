@@ -23,6 +23,7 @@
 #include "std_msgs/String.h"
 #include "geometry_msgs/PointStamped.h"
 #include "task2/ColorAndPose.h"
+#include <algorithm>
 
 ros::Publisher pubx;
 ros::Publisher puby;
@@ -104,7 +105,7 @@ void cloud_cb(const pcl::PCLPointCloud2ConstPtr &cloud_blob)
     pass.filter(*cloud_filtered);
 
     // Estimate point normals
-    ROS_INFO("Kaj se dogaja %d, %d", cloud_filtered->width, cloud_filtered->height);
+    // ROS_INFO("Kaj se dogaja %d, %d", cloud_filtered->width, cloud_filtered->height);
 
     if (cloud_filtered->points.empty())
         return;
@@ -168,7 +169,7 @@ void cloud_cb(const pcl::PCLPointCloud2ConstPtr &cloud_blob)
     seg.setNormalDistanceWeight(0.1);
     seg.setMaxIterations(10000);
     seg.setDistanceThreshold(0.005);
-    seg.setRadiusLimits(0.05, 0.2);
+    seg.setRadiusLimits(0.01, 0.2);
     seg.setInputCloud(cloud_filtered);
     seg.setInputNormals(cloud_normals);
 
@@ -180,16 +181,67 @@ void cloud_cb(const pcl::PCLPointCloud2ConstPtr &cloud_blob)
     extract.setNegative(false);
     pcl::PointCloud<PointT>::Ptr cloud_ring(new pcl::PointCloud<PointT>());
     extract.filter(*cloud_ring);
-    pcl::toPCLPointCloud2(*cloud_ring, outcloud_plane);
-    debug.publish(outcloud_plane);
-    
-    
-    
+    // pcl::toPCLPointCloud2(*cloud_ring, outcloud_plane);
+    // debug.publish(outcloud_plane);
 
-    if (!cloud_ring->points.empty() && (cloud_ring->points.size() * 2.5 > cloud_filtered->points.size()) && cloud_ring->points.size() > 300)
+    auto getMin = [](int* arr, int n){
+        int min = arr[0];
+
+        for(int i = 0; i < n; i++)
+            if (arr[i] < min)
+                min = arr[i];
+
+        return min;
+    };
+
+    auto getMax = [](int* arr, int n){
+        int max = arr[0];
+
+        for(int i = 0; i < n; i++)
+            if (arr[i] > max)
+                max = arr[i];
+
+        return max;
+    };
+
+    if(cloud_ring->points.empty())
+        return;
+    
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
+    pcl::ExtractIndices<PointT> extract2;
+
+    float position[] = {coefficients_ring->values[0], coefficients_ring->values[1], coefficients_ring->values[2]};
+    
+    float depthThreshold = coefficients_ring->values[3];
+    float threshold2 = depthThreshold*depthThreshold;
+    // Perform the actual filtering
+    for (int p=0; p < cloud_filtered->points.size(); ++p) {
+        // find the squared distance from the origin.
+        float pointDepth2 = (cloud_filtered->points[p].x - position[0]) * (cloud_filtered->points[p].x - position[0]) +
+                        (cloud_filtered->points[p].y - position[1]) * (cloud_filtered->points[p].y - position[1]) +
+                        (cloud_filtered->points[p].z - position[2]) * (cloud_filtered->points[p].z - position[2]);
+
+        // remove point if not within the threshold range
+        if (pointDepth2 > threshold2) {
+            // cloud_filtered->points[p] = cloud_filtered->points[cloud_filtered->points.size()-1];
+            // cloud_filtered->points.resize(cloud_filtered.width->points.size()-1);
+            inliers->indices.push_back(p);
+        }
+    }
+    extract2.setInputCloud(cloud_filtered);
+    extract2.setIndices(inliers);
+    extract2.setNegative(true);
+    extract2.filter(*cloud_filtered);
+
+    pcl::toPCLPointCloud2(*cloud_filtered, outcloud_plane);
+    debug.publish(outcloud_plane);
+
+    // gdb::publish("Inliers: ", cloud_ring->points.size(), ", Outliers: ", cloud_filtered->points.size());
+
+    if (!cloud_ring->points.empty() && (cloud_ring->points.size() * 1.3 > cloud_filtered->points.size()) && cloud_ring->points.size() > 300)
     {
         gdb::publish("Inliers: ", cloud_ring->points.size(), ", Outliers: ", cloud_filtered->points.size());
-        float radius_val = coefficients_ring->values[3];
+        float radius_val = coefficients_ring->values[3]+ 0.01;
         float radius_target = 0.12;
 
         uint32_t r = 0;
@@ -197,19 +249,40 @@ void cloud_cb(const pcl::PCLPointCloud2ConstPtr &cloud_blob)
         uint32_t b = 0;
         uint32_t rgb;
         int size = cloud_ring->points.size();
-        int i = 0;
-        int increment = 500;
-        for (; i < size; i += increment)
+        int increment = 20;
+        int count = 0;
+        for (int i = 0; i < size; i += increment)
         {
             rgb = *reinterpret_cast<int *>(&cloud_ring->points[i].rgb);
-            r += (rgb >> 16) & 0x0000ff;
-            g += (rgb >> 8) & 0x0000ff;
-            b += (rgb)&0x0000ff;
+
+            int r1 = (rgb >> 16) & 0x0000ff;
+            int g1 = (rgb >> 8) & 0x0000ff;
+            int b1 = (rgb)&0x0000ff;
+            int values[] = {r1, g1, b1};
+            int minV = getMin(values, 3);
+            int maxV = getMax(values, 3);
+
+            float saturation = maxV == 0 ? 0.0f : (1 - (minV / maxV)) * 255.0f;
+
+            if(saturation < 10) {
+                continue;
+            }
+
+            r += r1;
+            g += g1;
+            b += b1;
+
+            count++;
+        }
+        if(count == 0) {
+            r = g = b = 0;
+        }
+        else {
+            r = r / count;
+            g = g / count;
+            b = b / count;
         }
 
-        r = r / (i / increment);
-        g = g / (i / increment);
-        b = b / (i / increment);
 
         // printf("r: %d, g: %d, b: %d, samples: %d \n", r, g, b, i / increment);
 
@@ -250,35 +323,35 @@ void cloud_cb(const pcl::PCLPointCloud2ConstPtr &cloud_blob)
 
         tf2::doTransform(point_camera, point_map, tss);
 
-        marker.header.frame_id = "map";
-        marker.header.stamp = ros::Time::now();
+        // marker.header.frame_id = "map";
+        // marker.header.stamp = ros::Time::now();
 
-        marker.ns = "ring";
-        marker.id = 0;
+        // marker.ns = "ring";
+        // marker.id = 0;
 
-        marker.type = visualization_msgs::Marker::CYLINDER;
-        marker.action = visualization_msgs::Marker::ADD;
+        // marker.type = visualization_msgs::Marker::CYLINDER;
+        // marker.action = visualization_msgs::Marker::ADD;
 
-        marker.pose.position.x = point_map.point.x;
-        marker.pose.position.y = point_map.point.y;
-        marker.pose.position.z = point_map.point.z;
-        marker.pose.orientation.x = 0.0;
-	    marker.pose.orientation.y = 0.0;
-        marker.pose.orientation.z = 0.0;
-        marker.pose.orientation.w = 1.0;
+        // marker.pose.position.x = point_map.point.x;
+        // marker.pose.position.y = point_map.point.y;
+        // marker.pose.position.z = point_map.point.z;
+        // marker.pose.orientation.x = 0.0;
+	    // marker.pose.orientation.y = 0.0;
+        // marker.pose.orientation.z = 0.0;
+        // marker.pose.orientation.w = 1.0;
 
-        marker.scale.x = 0.1;
-	    marker.scale.y = 0.1;
-	    marker.scale.z = 0.1;
+        // marker.scale.x = 0.1;
+	    // marker.scale.y = 0.1;
+	    // marker.scale.z = 0.1;
 
-        marker.color.r=0.0f;
-        marker.color.g=1.0f;
-        marker.color.b=0.0f;
-        marker.color.a=1.0f;
+        // marker.color.r=0.0f;
+        // marker.color.g=1.0f;
+        // marker.color.b=0.0f;
+        // marker.color.a=1.0f;
 
-	    marker.lifetime = ros::Duration();
+	    // marker.lifetime = ros::Duration();
 
-	    pubm.publish (marker);
+	    // pubm.publish (marker);
 
         // exercise6:CylinderSegmentation msg;
         task2::ColorAndPose msg;
@@ -292,7 +365,7 @@ void cloud_cb(const pcl::PCLPointCloud2ConstPtr &cloud_blob)
         msg.pose = point_map;
         msg.color = color;
 
-        // ring_pose_publisher.publish(msg);
+        ring_pose_publisher.publish(msg);
         
         // printf("%d %d %d\n", r, g, b);
 
@@ -323,7 +396,7 @@ int main(int argc, char **argv)
     // Create a ROS publisher for the output point cloud
     pubx = nh.advertise<pcl::PCLPointCloud2>("planes", 1);
     puby = nh.advertise<pcl::PCLPointCloud2>("ring", 1);
-    pubm = nh.advertise<visualization_msgs::Marker>("detected_ring",1);
+    // pubm = nh.advertise<visualization_msgs::Marker>("detected_ring",1);
 
     ring_pose_publisher = nh.advertise<task2::ColorAndPose>("ring_detected", 1);
     debug = nh.advertise<pcl::PCLPointCloud2>("debug", 1);

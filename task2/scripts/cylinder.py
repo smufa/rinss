@@ -4,28 +4,45 @@ import sys
 import rospy
 import dlib
 import numpy as np
+import cv2
 
 from sensor_msgs.msg import Image
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import PointStamped, Vector3, Point, Pose
-from std_msgs.msg import ColorRGBA
+from std_msgs.msg import ColorRGBA, String
 from task2.msg import ColorAndPose
 
 class cylinders:
-    def __init__(self, color, pose):
+    def __init__(self, color, pose, speak_node):
+        self.speak = speak_node
         self.sample_size = 15
         self.colors = [color]
         self.poses = [pose]
         self.detections = 1
 
     def add(self, color, pose):
+        if self.detections == 1:
+            hsv = cv2.cvtColor(np.uint8([[[color.r, color.g, color.b]]]), cv2.COLOR_RGB2HSV)
+            print(hsv)
+            self.say_color(hsv[0,0,0])
         self.detections += 1
+
         if len(self.poses) > self.sample_size:
             del self.colors[0]
             del self.poses[0]
 
         self.colors.append(color)
         self.poses.append(pose)
+
+    def say_color(self, hue):
+        if 46 <= hue <= 69: # green
+            self.speak.publish('Green cylinder')
+        elif 95 <= hue <= 127: # blue
+            self.speak.publish('Blue cylinder')
+        elif hue <= 8 or 170 <= hue: # red
+            self.speak.publish('Red cylinder')
+        elif 25 <= hue <= 32: # yellow
+            self.speak.publish('Yellow cylinder')
 
     def get_average_pose(self):
         xSum = 0
@@ -78,6 +95,7 @@ class cylinder_recognizer:
 
         self.markers_pub = rospy.Publisher('cylinder_markers', MarkerArray, queue_size=1000)
         self.cylinder_sub = rospy.Subscriber('cylinder_detected', ColorAndPose, self.cylinder_detected_callback)
+        self.sound_pub = rospy.Publisher('speak', String, queue_size=1000)
         
         self.known_cylinders = []
         self.marker_array = MarkerArray()
@@ -99,7 +117,7 @@ class cylinder_recognizer:
         if not detected:
             print("New cylinder", len(self.known_cylinders))
             
-            self.known_cylinders.append(cylinders(msg.color, msg.pose.point))
+            self.known_cylinders.append(cylinders(msg.color, msg.pose.point, self.sound_pub))
             self.refresh_markers(len(self.known_cylinders)-1)
 
     def add_marker(self, pose, color, index):

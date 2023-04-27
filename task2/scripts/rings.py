@@ -2,217 +2,191 @@
 
 import sys
 import rospy
-import cv2
+import dlib
 import numpy as np
-import tf2_geometry_msgs
-import tf2_ros
+import cv2
+
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import PointStamped, Vector3, Pose
-from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
-from std_msgs.msg import ColorRGBA
+from geometry_msgs.msg import PointStamped, Vector3, Point, Pose
+from std_msgs.msg import ColorRGBA, String
+from task2.msg import ColorAndPose
 
+class rings:
+    def __init__(self, color, pose, speak_node):
+        self.speak = speak_node
+        self.green_ring = False
+        self.sample_size = 15
+        self.colors = [color]
+        self.poses = [pose]
+        self.detections = 1
 
-class The_Ring:
+    def add(self, color, pose):
+        if self.detections == 11:
+            print(color)
+            hsv = cv2.cvtColor(np.uint8([[[color.r, color.g, color.b]]]), cv2.COLOR_RGB2HSV)
+            print(hsv)
+            self.say_color(hsv[0,0,0], hsv[0,0,1], hsv[0,0,2])
+
+        self.detections += 1
+        if len(self.poses) > self.sample_size:
+            del self.colors[0]
+            del self.poses[0]
+
+        self.colors.append(color)
+        self.poses.append(pose)
+
+    def say_color(self, hue, saturation, value):
+        if value <= 130 or saturation < 10:
+            self.speak.publish('Black ring')
+            return
+
+        if 46 <= hue <= 69: # green
+            self.speak.publish('Green ring')
+            self.green_ring = True
+        elif 95 <= hue <= 127: # blue
+            self.speak.publish('Blue ring')
+        elif hue <= 8 or 170 <= hue: # red
+            self.speak.publish('Red ring')
+        elif 25 <= hue <= 32: # yellow
+            self.speak.publish('Yellow ring')
+
+    def get_average_pose(self):
+        xSum = 0
+        ySum = 0
+        zSum = 0
+        
+        for p in self.poses:
+            if p is not None:
+                xSum += p.x
+                ySum += p.y
+                zSum += p.z
+            else: 
+                print("NoneType sm dobu")
+        
+        l = len(self.poses)
+        
+        newPose = Point()
+        newPose.x = xSum/l
+        newPose.y = ySum/l
+        newPose.z = zSum/l 
+        
+        return newPose
+
+    def get_average_color(self):
+        r = 0
+        g = 0
+        b = 0
+        
+        for c in self.colors:
+            if c is not None:
+                r += c.r
+                g += c.g
+                b += c.b
+            else: 
+                print("NoneType sm dobu")
+        
+        l = len(self.colors)
+        
+        newColor = ColorRGBA()
+        newColor.r = r/l/255
+        newColor.g = g/l/255
+        newColor.b = b/l/255
+        newColor.a = 0.7
+        
+        return newColor
+
+class ring_recognizer:
     def __init__(self):
-        rospy.init_node('image_converter', anonymous=True)
+        rospy.init_node('ring', anonymous=True)
 
-        # An object we use for converting images between ROS format and OpenCV format
-        self.bridge = CvBridge()
-
-        # A help variable for holding the dimensions of the image
-        self.dims = (0, 0, 0)
-
-        # Marker array object used for visualizations
+        self.markers_pub = rospy.Publisher('ring_markers', MarkerArray, queue_size=1000)
+        self.ring_sub = rospy.Subscriber('ring_detected', ColorAndPose, self.ring_detected_callback)
+        self.sound_pub = rospy.Publisher('speak', String, queue_size=1000)
+        
+        self.known_rings = []
         self.marker_array = MarkerArray()
-        self.marker_num = 1
+        self.marker_num = 0
+    
+    def ring_detected_callback(self, msg):
+        
+        detected = False
+        for i, ring in enumerate(self.known_rings):
+            p1 = msg.pose.point
+            p2 = ring.get_average_pose()
+            distance = np.linalg.norm(np.array([p1.x, p1.y, p1.z]) - np.array([p2.x, p2.y, p2.z]))
 
-        # Subscribe to the image and/or depth topic
-        self.image_sub = rospy.Subscriber("/camera/rgb/image_raw", Image, self.image_callback)
-        # self.depth_sub = rospy.Subscriber("/camera/depth_registered/image_raw", Image, self.depth_callback)
+            if distance < 0.3:
+                detected = True
+                self.known_rings[i].add(msg.color, msg.pose.point)
+                if self.known_rings[i].detections%10 == 0:
+                    self.refresh_markers(i)
 
-        # Publiser for the visualization markers
-        self.markers_pub = rospy.Publisher('markers', MarkerArray, queue_size=1000)
+        if not detected:
+            print("New ring", len(self.known_rings))
+            
+            self.known_rings.append(rings(msg.color, msg.pose.point, self.sound_pub))
+            self.refresh_markers(len(self.known_rings)-1)
 
-        # Object we use for transforming between coordinate frames
-        self.tf_buf = tf2_ros.Buffer()
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buf)
+    def add_marker(self, pose, color, index):
+        new_marker = Marker()
+        new_marker.header.stamp = rospy.Time(0)
+        new_marker.header.frame_id = 'map'
+        new_marker.pose.position.x = pose.x
+        new_marker.pose.position.y = pose.y
+        new_marker.pose.position.z = pose.z
+        new_marker.type = Marker.SPHERE
+        new_marker.action = Marker.ADD
+        new_marker.frame_locked = False
+        new_marker.lifetime = rospy.Time(0)
+        new_marker.id = self.marker_num
+        new_marker.scale = Vector3(0.3, 0.3, 0.3)
+        new_marker.color = color
 
-
-    def get_pose(self,e,dist):
-        # Calculate the position of the detected ellipse
-
-        k_f = 525 # kinect focal length in pixels
-
-        elipse_x = self.dims[1] / 2 - e[0][0]
-        elipse_y = self.dims[0] / 2 - e[0][1]
-
-        angle_to_target = np.arctan2(elipse_x,k_f)
-
-        # Get the angles in the base_link relative coordinate system
-        x,y = dist*np.cos(angle_to_target), dist*np.sin(angle_to_target)
-
-        ### Define a stamped message for transformation - directly in "base_frame"
-        #point_s = PointStamped()
-        #point_s.point.x = x
-        #point_s.point.y = y
-        #point_s.point.z = 0.3
-        #point_s.header.frame_id = "base_link"
-        #point_s.header.stamp = rospy.Time(0)
-
-        # Define a stamped message for transformation - in the "camera rgb frame"
-        point_s = PointStamped()
-        point_s.point.x = -y
-        point_s.point.y = 0
-        point_s.point.z = x
-        point_s.header.frame_id = "camera_rgb_optical_frame"
-        point_s.header.stamp = rospy.Time(0)
-
-        # Get the point in the "map" coordinate system
-        point_world = self.tf_buf.transform(point_s, "map")
-
-        # Create a Pose object with the same position
-        pose = Pose()
-        pose.position.x = point_world.point.x
-        pose.position.y = point_world.point.y
-        pose.position.z = point_world.point.z
-
-        # Create a marker used for visualization
         self.marker_num += 1
-        marker = Marker()
-        marker.header.stamp = point_world.header.stamp
-        marker.header.frame_id = point_world.header.frame_id
-        marker.pose = pose
-        marker.type = Marker.CUBE
-        marker.action = Marker.ADD
-        marker.frame_locked = False
-        marker.lifetime = rospy.Duration.from_sec(10)
-        marker.id = self.marker_num
-        marker.scale = Vector3(0.1, 0.1, 0.1)
-        marker.color = ColorRGBA(0, 1, 0, 1)
-        self.marker_array.markers.append(marker)
+        return new_marker
+
+    def add_text(self, pose, index):
+        new_marker = Marker()
+        new_marker.header.stamp = rospy.Time(0)
+        new_marker.header.frame_id = 'map'
+        new_marker.pose.position.x = pose.x
+        new_marker.pose.position.y = pose.y
+        new_marker.pose.position.z = pose.z
+        new_marker.type = Marker.TEXT_VIEW_FACING
+        new_marker.action = Marker.ADD
+        new_marker.frame_locked = False
+        new_marker.text = str(self.known_rings[index].detections)
+        new_marker.lifetime = rospy.Time(0)
+        new_marker.id = self.marker_num
+        new_marker.scale = Vector3(0.2, 0.2, 0.2)
+        new_marker.color = ColorRGBA(0, 0, 0, 1)
+
+        self.marker_num += 1
+        return new_marker 
+
+    def refresh_markers(self, index):
+        delete_marker = Marker()
+        delete_marker.header.frame_id = 'map'
+        delete_marker.action = Marker.DELETEALL
+
+        self.marker_array.markers.append(delete_marker)
+
+        for i, ring in enumerate(self.known_rings):
+            if ring.detections > 10:
+                avg_pos = ring.get_average_pose()
+                avg_color = ring.get_average_color()
+                self.marker_array.markers.append(self.add_marker(avg_pos, avg_color, i))
+                self.marker_array.markers.append(self.add_text(avg_pos, i))
 
         self.markers_pub.publish(self.marker_array)
 
-
-    def image_callback(self,data):
-        print('I got a new image!')
-
-        try:
-            cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-        except CvBridgeError as e:
-            print(e)
-
-        # Set the dimensions of the image
-        self.dims = cv_image.shape
-
-        # Tranform image to gayscale
-        gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-
-        # Do histogram equlization
-        img = cv2.equalizeHist(gray)
-
-        # Binarize the image, there are different ways to do it
-        #ret, thresh = cv2.threshold(img, 50, 255, 0)
-        #ret, thresh = cv2.threshold(img, 70, 255, cv2.THRESH_BINARY)
-        thresh = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, 25)
-
-        # Extract contours
-        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-
-        # Example how to draw the contours, only for visualization purposes
-        cv2.drawContours(img, contours, -1, (255, 0, 0), 3)
-        cv2.imshow("Contour window",img)
-        cv2.waitKey(1)
-
-        # Fit elipses to all extracted contours
-        elps = []
-        for cnt in contours:
-            #     print cnt
-            #     print cnt.shape
-            if cnt.shape[0] >= 20:
-                ellipse = cv2.fitEllipse(cnt)
-                elps.append(ellipse)
-
-
-        # Find two elipses with same centers
-        candidates = []
-        for n in range(len(elps)):
-            for m in range(n + 1, len(elps)):
-                e1 = elps[n]
-                e2 = elps[m]
-                dist = np.sqrt(((e1[0][0] - e2[0][0]) ** 2 + (e1[0][1] - e2[0][1]) ** 2))
-                #             print dist
-                if dist < 5:
-                    candidates.append((e1,e2))
-
-        print("Processing is done! found", len(candidates), "candidates for rings")
-
-        try:
-            depth_img = rospy.wait_for_message('/camera/depth/image_raw', Image)
-        except Exception as e:
-            print(e)
-
-        # Extract the depth from the depth image
-        for c in candidates:
-
-            # the centers of the ellipses
-            e1 = c[0]
-            e2 = c[1]
-
-            # drawing the ellipses on the image
-            cv2.ellipse(cv_image, e1, (0, 255, 0), 2)
-            cv2.ellipse(cv_image, e2, (0, 255, 0), 2)
-
-            size = (e1[1][0]+e1[1][1])/2
-            center = (e1[0][1], e1[0][0])
-
-            x1 = int(center[0] - size / 2)
-            x2 = int(center[0] + size / 2)
-            x_min = x1 if x1>0 else 0
-            x_max = x2 if x2<cv_image.shape[0] else cv_image.shape[0]
-
-            y1 = int(center[1] - size / 2)
-            y2 = int(center[1] + size / 2)
-            y_min = y1 if y1 > 0 else 0
-            y_max = y2 if y2 < cv_image.shape[1] else cv_image.shape[1]
-
-            depth_image = self.bridge.imgmsg_to_cv2(depth_img, "16UC1")
-
-            self.get_pose(e1, float(np.mean(depth_image[x_min:x_max,y_min:y_max]))/1000.0)
-
-        if len(candidates)>0:
-                cv2.imshow("Image window",cv_image)
-                cv2.waitKey(1)
-
-    def depth_callback(self,data):
-
-        try:
-            depth_image = self.bridge.imgmsg_to_cv2(data, "16UC1")
-        except CvBridgeError as e:
-            print(e)
-
-        # Do the necessairy conversion so we can visuzalize it in OpenCV
-        image_1 = depth_image / 65536.0 * 255
-        image_1 =image_1/np.max(image_1)*255
-
-        image_viz = np.array(image_1, dtype= np.uint8)
-
-        cv2.imshow("Depth window", image_viz)
-        cv2.waitKey(1)
-
-
 def main():
+    ring_recog = ring_recognizer()
 
-    ring_finder = The_Ring()
-
-    try:
-        rospy.spin()
-    except KeyboardInterrupt:
-        print("Shutting down")
-
-    cv2.destroyAllWindows()
-
-
+    rate = rospy.Rate(1)
+    while not rospy.is_shutdown():
+        rate.sleep()
+    
 if __name__ == '__main__':
     main()
