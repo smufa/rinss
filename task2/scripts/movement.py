@@ -7,18 +7,21 @@ from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 import os 
 import cv2
 import numpy as np
+import math
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
 from nav_msgs.msg import OccupancyGrid
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from actionlib_msgs.msg import GoalStatusArray
 from sound_play.msg import SoundRequest
 from sound_play.libsoundplay import SoundClient
-from std_msgs.msg import Int8
+from std_msgs.msg import Int8, Bool, String
 from task2.msg import GreetingDelta, Greet
 from geometry_msgs.msg import Pose, Twist, Vector3
 from tf.transformations import euler_from_quaternion
+from tf.transformations import quaternion_from_euler
+from tf2_msgs.msg import TFMessage
 
 
 class TextToSpeach:
@@ -36,13 +39,15 @@ class Robot:
         rospy.init_node('movement', anonymous=True)
 
         self.states = {
-            0: 'exploring',
-            1: 'greeting',
-            2: 'idle',
-            3: 'done'
+            'exploring': 0,
+            'greeting': 1,
+            'idle': 2,
+            'parking': 3,
+            'fine_parking': 4,
+            'done': 10
         }
 
-        self.state = 0
+        self.state = self.states['exploring']
 
         self.ps = PoseStamped()
         self.ps.header.frame_id = "map"
@@ -62,13 +67,19 @@ class Robot:
         self.distanceToFace = 0.0
         self.angleToFace = 0.0
 
+        self.cylinders = False
+        self.rings = False
+
+        self.robot_position = []
 
         # self.xs = [-0.75, -1.55, -0.7, -1.2, -1.2, -0.6, -0.05, 0.25, 1.2, 2.05, 2.75, 2.6,   1.8,  1.25, 1.1,  1.1,  2.1,   2.85, 3.35, 2.5, 1.75,  0.85, 0,   -0.25, -0.35, -0.1]
         # self.ys = [-0.45, -0.45,  0.3,  1.25, 2.2,  1.45, 1.6,  2.05, 1.9, 1.75, 1.25, 0.25, -0.25, 0.8, -0.3, -0.9, -0.65, -1.3, -1.7, -2,  -2.15, -2.1, -1.9, -1.4,  -0.7,  -0.25]
         # self.xs = [-0.3, 1.85, 3.45, 1.1, 2.75, 0.45, -1.0, -1.05]
         # self.ys = [-1.3, -1.5, -1.25, -0.04, 1.8, 2.35, 1.85, 0.15]
-        self.xs = [-1.15, -0.45, -1.3, 0.55, 1.2, 2.55, 2.25, 3.3, 1.8, -0.05, -0.3]
-        self.ys = [0.1, 1.3, 2.05, 2.55, 0.5, 1.55, -0.45, -0.9, -1.45, -1.35, -0.1]
+        # -1.3
+        # 2.05
+        self.xs = [-1.15, -0.45, 0.55, 1.2, 2.55, 2.25, 3.3, 1.8, -0.05, -0.3]
+        self.ys = [0.1, 1.3, 2.55, 0.5, 1.55, -0.45, -0.9, -1.45, -1.35, -0.1]
         self.tts = TextToSpeach()
         
         self.goal_pub = rospy.Publisher('/move_base_simple/goal', PoseStamped, queue_size=1000)
@@ -76,10 +87,24 @@ class Robot:
         # self.state_sub = rospy.Subscriber('move_base/status', GoalStatusArray, self.status_callback)
         self.new_face_sub = rospy.Subscriber("greet", Greet, self.new_face_callback)
         self.greeting_delta_sub = rospy.Subscriber("greeting_delta", GreetingDelta, self.correction_callback)
+
+        self.robot_position_sub = rospy.Subscriber('tf', TFMessage, self.robot_position_callback)
+        self.park_sub = rospy.Subscriber('park_spot', Pose, self.park_callback)
+
+        self.arm_command_pub = rospy.Publisher('arm_command', String, queue_size=1000)
+
+        self.cylinder_sub = rospy.Subscriber('all_cylinders_detected', Bool, self.all_cylinders_detected)
+        self.ring_sub = rospy.Subscriber('all_rings_detected', Pose, self.all_rings_detected)
+
         self.movement_client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
         self.movement_client.wait_for_server()   
 
+    def park_callback(self, msg):
+        self.park_spot = msg.position
 
+    def robot_position_callback(self, msg):
+        self.robot_position = msg.transforms[0].transform.translation
+       
     def calculate_distance(self, p1, p2):
         return np.linalg.norm(np.array(p1) - np.array(p2))
 
@@ -118,12 +143,16 @@ class Robot:
         kmeans = KMeans(n_clusters=goal_count).fit(roaming_area)
 
         # Rescale goals back to original size
+
+        # plt.imshow(whole_map, cmap='gray')
+        # plt.scatter(goals[:, 0], goals[:, 1], c='r', s=100)
+        # plt.show()
         goals = scale_factor * kmeans.cluster_centers_
         goals[:, [1, 0]] = goals[:, [0, 1]]
 
-        plt.imshow(whole_map, cmap='gray')
-        plt.scatter(goals[:, 0], goals[:, 1], c='r', s=100)
-        plt.show()
+        # plt.imshow(whole_map, cmap='gray')
+        # plt.scatter(goals[:, 0], goals[:, 1], c='r', s=100)
+        # plt.show()
 
         # Move into the navigation frame
         goals[:, 0] = goals[:, 0] * resolution + position.x
@@ -202,25 +231,10 @@ class Robot:
 
 
     def move(self):
-        if self.state == 0: # exploring
+        if self.state == self.states['exploring']:
             state = self.movement_client.get_state()
             # print(state)
-            if state == 3 or state == 9:
-                self.ps.header.stamp = rospy.Time.now()
-                self.ps.pose.position.x = self.xs[self.iterator]
-                self.ps.pose.position.y = self.ys[self.iterator]
-                
-                goal = MoveBaseGoal()
-                goal.target_pose = self.ps
-                #print(goal)
-                self.movement_client.send_goal(goal)
-                # self.movement_client.wait_for_result()
-
-                self.iterator += 1
-                if self.iterator == len(self.xs):
-                    self.iterator = 0
-
-            elif state == 4:
+            if state == 3 or state == 9 or state == 4:
                 self.ps.header.stamp = rospy.Time.now()
                 self.ps.pose.position.x = self.xs[self.iterator]
                 self.ps.pose.position.y = self.ys[self.iterator]
@@ -234,9 +248,8 @@ class Robot:
                 if self.iterator == len(self.xs):
                     self.iterator = 0
 
-        elif self.state == 1: # greeting
-            goal = MoveBaseGoal()
-            goal.target_pose = self.facePos
+
+        elif self.state == self.states['greeting']:
 
             twist_msg = Twist()
             while self.distanceToFace > 0.6:
@@ -245,11 +258,6 @@ class Robot:
 
                 self.twist_pub.publish(twist_msg)
             
-            #self.movement_client.cancel_all_goals()
-            #self.movement_client.wait_for_result()
-            # self.movement_client.send_goal_and_wait(goal)
-            
-            # self.movement_client.wait_for_result()
             # when get there
             self.tts.speak("Hello face number " + str(self.faceID))
 
@@ -263,19 +271,137 @@ class Robot:
                 self.twist_pub.publish(twist_msg)
 
             if self.faceID >= self.maxFaces:
-                self.state = 3
+                self.state = self.states['done']
             else:
-                self.state = 2
+                self.state = self.states['idle']
 
             print('greeting', self.faceID)
 
-        elif self.state == 2: # drkanje kurca
-            self.state = 0
+        elif self.state == self.states['idle']: # drkanje kurca
+            self.state = self.states['exploring']
+
+        elif self.state == self.states['parking']:
+            closest = None
+            min_dist = 99999
+            i = 0
+            closestIndex = 0
+            goal = [self.rings.position.x, self.rings.position.y]
+            for x, y in np.vstack([self.xs, self.ys]).T:
+                dist = self.calculate_distance([x, y], goal)
+                if dist < min_dist:
+                    closest = [x, y]
+                    min_dist = dist
+                    closestIndex = i
+                
+                i += 1
+
+            self.movement_client.cancel_all_goals()
+
+            self.ps.header.stamp = rospy.Time.now()
+            self.ps.pose.position.x = closest[0]
+            self.ps.pose.position.y = closest[1]
+            quaternion = self.quaternion_from_two_points(np.array(closest), np.array([self.rings.position.x, self.rings.position.y]))
+
+            self.ps.pose.orientation.x = quaternion[0]
+            self.ps.pose.orientation.y = quaternion[1]
+            self.ps.pose.orientation.z = quaternion[2]
+            self.ps.pose.orientation.w = quaternion[3]
+            
+            goal = MoveBaseGoal()
+            goal.target_pose = self.ps
+            print(min_dist)
+            print('going to green ring')
+            # print(goal)
+            self.movement_client.send_goal_and_wait(goal)
+            print('went there')
+            self.state = self.states['fine_parking']
+
+        elif self.state == self.states['fine_parking']:
+            dist = self.calculate_distance([self.rings.position.x, self.rings.position.y, self.rings.position.z], [self.robot_position.x, self.robot_position.y, self.robot_position.z])
+            twist_msg = Twist()
+            while dist > 0.7:
+                dist = self.calculate_distance([self.rings.position.x, self.rings.position.y, self.rings.position.z], [self.robot_position.x, self.robot_position.y, self.robot_position.z])
+            
+                twist_msg.linear.x = 0.05
+
+                self.twist_pub.publish(twist_msg)
+            
+            self.arm_command_pub.publish('retract')
+            self.arm_command_pub.publish('extend')
+            rospy.sleep(4)
+            
+            park_spot = self.park_spot
+            # park_spot = self.park_spot
+            # ring_np = np.array([self.rings.position.x, self.rings.position.y, 0])
+            # park_spot_np = np.array([self.park_spot.x, self.park_spot.y, 0])
+            # quat = self.quaternion_from_two_points(ring_np, park_spot_np)
+            # direction = ring_np - park_spot_np
+            # direction = direction/np.linalg.norm(direction)
+            # angle = math.atan2(direction[1], direction[0])
+            # norm_dir = np.array([self.robot_position.x, self.robot_position.y, self.robot_position.z]) - np.array([self.park_spot.x, self.park_spot.y, self.park_spot.z])
+            # normal = norm_dir / np.linalg.norm(norm_dir)
+            # new_position = ring_np + normal * 0.6
+
+            # self.ps.header.stamp = rospy.Time.now()
+            # self.ps.pose.position.x = new_position[0]
+            # self.ps.pose.position.y = new_position[1]
+            # quaternion = self.quaternion_from_two_points(np.array([self.rings.position.x, self.rings.position.y]), np.array([self.park_spot.x, self.park_spot.y]))
+
+            # self.ps.pose.orientation.x = quaternion[0]
+            # self.ps.pose.orientation.y = quaternion[1]
+            # self.ps.pose.orientation.z = quaternion[2]
+            # self.ps.pose.orientation.w = quaternion[3]
+            
+            # goal = MoveBaseGoal()
+            # goal.target_pose = self.ps
+
+            # self.movement_client.send_goal_and_wait(goal)
+            # print('sm prsou na goal')
+
+            dist = self.calculate_distance([park_spot.x,park_spot.y,park_spot.z], [self.robot_position.x, self.robot_position.y, self.robot_position.z])
+            twist_msg = Twist()
+            while dist > 0.3:
+                dist = self.calculate_distance([park_spot.x,park_spot.y,park_spot.z], [self.robot_position.x, self.robot_position.y, self.robot_position.z])
+                print(dist)
+               
+                twist_msg.linear.x = 0.05
+
+                self.twist_pub.publish(twist_msg)
+            self.tts.speak('beep :(')
+            print('parkirou')
+            self.state = self.states['done']
+
+
+    def quaternion_from_two_points(self, p1, p2):
+        direction = p2 - p1
+        direction = direction/np.linalg.norm(direction)
+        angle = math.atan2(direction[1], direction[0])
+        return quaternion_from_euler(0,0,angle)
 
 
     def new_face_callback(self, msg):
         self.state = 1
         self.faceID = msg.id
+
+    def all_cylinders_detected(self, msg):
+        # print('Cylinders:')
+        # print(msg)
+        # print(self.rings)
+        # print(self.cylinders)
+        self.cylinders = msg.data
+        if self.rings:
+            self.state = self.states['parking']
+
+
+    def all_rings_detected(self, msg):
+        # print('Ring pose:')
+        # print(msg)
+        self.rings = msg
+        # print(self.rings)
+        # print(self.cylinders)
+        if self.cylinders:
+            self.state = self.states['parking']
+
 
 
 def main():

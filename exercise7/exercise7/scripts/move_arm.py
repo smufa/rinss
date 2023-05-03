@@ -33,6 +33,10 @@ class Arm_Mover():
         self.right.points = [JointTrajectoryPoint(positions=[-1.57,0.3,1,0],
                                                     time_from_start = rospy.Duration(1))]
 
+        self.stand = JointTrajectory()
+        self.stand.joint_names = ["arm_shoulder_pan_joint", "arm_shoulder_lift_joint", "arm_elbow_flex_joint", "arm_wrist_flex_joint"]
+        self.stand.points = [JointTrajectoryPoint(positions=[0,0,0,0],
+                                                    time_from_start = rospy.Duration(1))]
     def new_user_command(self, data):
         self.user_command = data.data.strip()
         self.send_command = True
@@ -49,6 +53,9 @@ class Arm_Mover():
             elif self.user_command == 'right':
                 self.arm_movement_pub.publish(self.right)
                 print('Right-ed arm!')
+            elif self.user_command == 'stand':
+                self.arm_movement_pub.publish(self.stand)
+                print('Stand arm!')
             else:
                 print('Unknown instruction:', self.user_command)
                 return(-1)
@@ -57,8 +64,6 @@ class Arm_Mover():
 if __name__ == "__main__":
     am = Arm_Mover()
     time.sleep(.5)
-    am.arm_movement_pub.publish(am.retract)
-    print('Retracted arm!')
     
     r = rospy.Rate(10)
     while not rospy.is_shutdown():

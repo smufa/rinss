@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<launch>
+
+    <node pkg="task2" type="cylinder_segmentation" name="cylinder_segmentation">
+        <remap from="input" to="/camera/depth/points"/>
+    </node>
+    <node pkg="task2" type="ring_segmentation" name="ring_segmentation">
+        <remap from="input" to="/arm_camera/depth/points"/>
+    </node>
+    <node pkg="task2" type="rings.py" name="ring_detector"/>
+    <node pkg="task2" type="cylinders.py" name="cylinder_detector"/>
+    <node pkg="task2" type="sound.py" name="sound_node"/>
+    <node pkg="task2" type="ring_localizer.py" name="park_spot"/>
+    <node pkg="task2" type="move_arm.py" name="move_arm"/>
+
+</launch>

@@ -9,12 +9,13 @@ import cv2
 from sensor_msgs.msg import Image
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import PointStamped, Vector3, Point, Pose
-from std_msgs.msg import ColorRGBA, String
+from std_msgs.msg import ColorRGBA, String, Bool
 from task2.msg import ColorAndPose
 
 class rings:
     def __init__(self, color, pose, speak_node):
         self.speak = speak_node
+        self.number_of_rings = 4
         self.green_ring = False
         self.sample_size = 15
         self.colors = [color]
@@ -103,6 +104,7 @@ class ring_recognizer:
         self.markers_pub = rospy.Publisher('ring_markers', MarkerArray, queue_size=1000)
         self.ring_sub = rospy.Subscriber('ring_detected', ColorAndPose, self.ring_detected_callback)
         self.sound_pub = rospy.Publisher('speak', String, queue_size=1000)
+        self.ring_pub = rospy.Publisher('all_rings_detected', Pose, queue_size=1000)
         
         self.known_rings = []
         self.marker_array = MarkerArray()
@@ -127,6 +129,24 @@ class ring_recognizer:
             
             self.known_rings.append(rings(msg.color, msg.pose.point, self.sound_pub))
             self.refresh_markers(len(self.known_rings)-1)
+
+        actualRings = 0
+        for ring in self.known_rings:
+            if ring.detections > 10:
+                actualRings += 1
+
+        print(actualRings)
+        if actualRings >= self.known_rings[0].number_of_rings:
+            for ring in self.known_rings:
+                print(ring.green_ring)
+                if ring.green_ring == True:
+                    avg = ring.get_average_pose()
+                    pose = Pose()
+                    pose.position.x = avg.x
+                    pose.position.y = avg.y
+                    pose.position.z = avg.z
+                        
+                    self.ring_pub.publish(pose)
 
     def add_marker(self, pose, color, index):
         new_marker = Marker()

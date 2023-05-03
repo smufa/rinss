@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
 	std_msgs
 	geometry_msgs
 	tf2
+  tf2_msgs
 	tf2_geometry_msgs
 	pcl_conversions
   	pcl_msgs
@@ -56,6 +57,7 @@ generate_messages(DEPENDENCIES
 	std_msgs
 	geometry_msgs
 	sensor_msgs
+  tf2_msgs
 )
 
 ## Declare the catkin package
@@ -72,6 +74,7 @@ catkin_package(
     roscpp
     sensor_msgs
     std_msgs
+    tf2_msgs
   DEPENDS
     Boost
     Eigen
