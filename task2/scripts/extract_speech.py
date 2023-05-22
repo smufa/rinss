@@ -5,7 +5,7 @@ import time
 import rospy
 
 import speech_recognition as sr
-
+from task2.msg import PrisonerLocation
 
 
 class SpeechTranscriber:
@@ -57,10 +57,22 @@ class SpeechTranscriber:
 if __name__ == '__main__':
     
     st = SpeechTranscriber()
-    
+    colors = {"blue", "red", "green", "yellow"}
+    prisonerLocation = PrisonerLocation()
+
     while not rospy.is_shutdown():
         text = st.recognize_speech()
-        print('I recognized this sentence:', text)
+
+        for color in colors:
+            if text.find(color) != -1:
+                if color == "red":
+                    prisonerLocation.red = True
+                if color == "blue":
+                    prisonerLocation.blue = True
+                if color == "green":
+                    prisonerLocation.green = True
+                if color == "yellow":
+                    prisonerLocation.yellow = True
         time.sleep(4)
 
 

@@ -16,19 +16,17 @@ class rings:
     def __init__(self, color, pose, speak_node):
         self.speak = speak_node
         self.number_of_rings = 4
-        self.green_ring = False
         self.sample_size = 15
         self.colors = [color]
+        self.detectedColor = None
         self.poses = [pose]
         self.detections = 1
 
     def add(self, color, pose):
         if self.detections == 11:
-            print(color)
             hsv = cv2.cvtColor(np.uint8([[[color.r, color.g, color.b]]]), cv2.COLOR_RGB2HSV)
-            print(hsv)
-            self.say_color(hsv[0,0,0], hsv[0,0,1], hsv[0,0,2])
-
+            self.detectedColor = self.detect_color(hsv[0,0,0], hsv[0,0,1], hsv[0,0,2])
+            
         self.detections += 1
         if len(self.poses) > self.sample_size:
             del self.colors[0]
@@ -37,20 +35,19 @@ class rings:
         self.colors.append(color)
         self.poses.append(pose)
 
-    def say_color(self, hue, saturation, value):
+    def detect_color(self, hue, saturation, value):
         if value <= 130 or saturation < 10:
-            self.speak.publish('Black ring')
-            return
+            return 'Black'
+
 
         if 46 <= hue <= 69: # green
-            self.speak.publish('Green ring')
-            self.green_ring = True
+            return 'Green'
         elif 95 <= hue <= 127: # blue
-            self.speak.publish('Blue ring')
+            return 'Blue'
         elif hue <= 8 or 170 <= hue: # red
-            self.speak.publish('Red ring')
+            return 'Red'
         elif 25 <= hue <= 32: # yellow
-            self.speak.publish('Yellow ring')
+            return 'Yellow'
 
     def get_average_pose(self):
         xSum = 0

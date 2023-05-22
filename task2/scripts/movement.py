@@ -78,8 +78,11 @@ class Robot:
         # self.ys = [-1.3, -1.5, -1.25, -0.04, 1.8, 2.35, 1.85, 0.15]
         # -1.3
         # 2.05
-        self.xs = [-1.15, -0.45, 0.55, 1.2, 2.55, 2.25, 3.3, 1.8, -0.05, -0.3]
-        self.ys = [0.1, 1.3, 2.55, 0.5, 1.55, -0.45, -0.9, -1.45, -1.35, -0.1]
+        #self.xs = [-1.15, -0.45, 0.55, 1.2, 2.55, 2.25, 3.3, 1.8, -0.05, -0.3]
+        #self.ys = [0.1, 1.3, 2.55, 0.5, 1.55, -0.45, -0.9, -1.45, -1.35, -0.1]
+        self.xs = []
+        self.ys = []
+        
         self.tts = TextToSpeach()
         
         self.goal_pub = rospy.Publisher('/move_base_simple/goal', PoseStamped, queue_size=1000)
@@ -143,16 +146,12 @@ class Robot:
         kmeans = KMeans(n_clusters=goal_count).fit(roaming_area)
 
         # Rescale goals back to original size
-
-        # plt.imshow(whole_map, cmap='gray')
-        # plt.scatter(goals[:, 0], goals[:, 1], c='r', s=100)
-        # plt.show()
         goals = scale_factor * kmeans.cluster_centers_
         goals[:, [1, 0]] = goals[:, [0, 1]]
 
-        # plt.imshow(whole_map, cmap='gray')
-        # plt.scatter(goals[:, 0], goals[:, 1], c='r', s=100)
-        # plt.show()
+        plt.imshow(whole_map, cmap='gray')
+        plt.scatter(goals[:, 0], goals[:, 1], c='r', s=100)
+        plt.show()
 
         # Move into the navigation frame
         goals[:, 0] = goals[:, 0] * resolution + position.x
@@ -190,10 +189,11 @@ class Robot:
             ordered_goals.append(closest_next)
 
         # Create goal poses including rotations
-        #final_goals = self.recalculate_angles(ordered_goals)
+        final_goals = self.recalculate_angles(ordered_goals)
 
 
     def recalculate_angles(self, ordered_goals):
+
         for i in range(len(ordered_goals)):
             self.xs.append(ordered_goals[i][0])
             self.ys.append(ordered_goals[i][1])
