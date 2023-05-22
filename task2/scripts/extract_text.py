@@ -9,24 +9,8 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from std_msgs.msg import ColorRGBA
 import pytesseract
+import re
 
-dictm = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
-
-# The object that we will pass to the markerDetect function
-params =  cv2.aruco.DetectorParameters_create()
-
-print(params.adaptiveThreshConstant) 
-print(params.adaptiveThreshWinSizeMax)
-print(params.adaptiveThreshWinSizeMin)
-print(params.minCornerDistanceRate)
-print(params.adaptiveThreshWinSizeStep)
-
-# To see description of the parameters
-# https://docs.opencv.org/3.3.1/d1/dcd/structcv_1_1aruco_1_1DetectorParameters.html
-
-# You can set these parameters to get better marker detections
-params.adaptiveThreshConstant = 25
-adaptiveThreshWinSizeStep = 2
 
 
 class DigitExtractor:
@@ -71,26 +55,24 @@ class DigitExtractor:
         config = '--psm 11'
         
         # Visualize the image we are passing to Tesseract
-        cv2.imshow('Warped image',img_out)
-        cv2.waitKey(1)
+        # cv2.imshow('Warped image',img_out)
+        # cv2.waitKey(1)
     
         # Extract text from image
         text = pytesseract.image_to_string(img_out, config = config)
         
-        # Check and extract data from text
-        print('Extracted>>',text)
         
         # Remove any whitespaces from the left and right
         text = text.strip()
         
-#             # If the extracted text is of the right length
-        if len(text)==2:
-            x=int(text[0])
-            y=int(text[1])
-            print('The extracted datapoints are x=%d, y=%d' % (x,y))
-        else:
-            print('The extracted text has is of length %d. Aborting processing' % len(text))
+        print('Extracted>>',text)
 
+        print('END')
+        color = re.search('BLACK|GREEN', text)
+        print(color.group(0))
+
+        btc = int(re.search('d+\.\d+|\d+ \d+|\d+', re.search('(\d+\.\d+|\d+ \d+|\d+) (?:B\w*)', text).group(0)).group(0).replace(' ', '').replace(',', ''))
+        print(btc)
 
 
 def main(args):

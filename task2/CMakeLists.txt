@@ -47,6 +47,7 @@ add_message_files(DIRECTORY msg
 	Greet.msg
 	ColorAndPose.msg
   PrisonerLocation.msg
+  Poster.msg
 )
 
 add_service_files(

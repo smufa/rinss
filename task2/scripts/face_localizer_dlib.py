@@ -4,15 +4,18 @@ import sys
 import rospy
 import dlib
 import cv2
+import sys
 import numpy as np
 import tf2_geometry_msgs
 import tf2_ros
+import pytesseract
+import re
 
 #import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import PointStamped, Vector3, Pose, Quaternion
 from cv_bridge import CvBridge, CvBridgeError
-from task2.msg import Face, GreetingDelta
+from task2.msg import Face, GreetingDelta, Poster
 
 from tf.transformations import quaternion_from_euler
 
@@ -32,6 +35,9 @@ class face_localizer:
         # Publiser for the visualization markers
         self.face_pub = rospy.Publisher('captured_face', Image, queue_size=1000)
         self.face_and_pose_pub = rospy.Publisher('face_and_pose', Face, queue_size=1000)
+
+        #Posteer
+        self.poster_pub = rospy.Publisher('poster', Poster, queue_size=1)
 
         # Publisher for greeting delta
         self.greet_pub = rospy.Publisher('greeting_delta', GreetingDelta, queue_size=1000)
@@ -129,6 +135,7 @@ class face_localizer:
         # For each detected face, extract the depth from the depth image
         for face_rectangle in face_rectangles:
             print('Faces were detected')
+            self.find_text(rgb_image, face_rectangle)
 
             # The coordinates of the rectanle
             x1 = face_rectangle.left()
@@ -168,6 +175,33 @@ class face_localizer:
                 msg.pose = pose
 
                 self.face_and_pose_pub.publish(msg)
+
+    def find_text(self, image, face):
+        # Convert the image to grayscale
+        img_out = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Option 1 - use adaptive thresholding
+        img_out = cv2.adaptiveThreshold(img_out,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,11,5)
+        
+        # Use Otsu's thresholding
+        #ret,img_out = cv2.threshold(img_out,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    
+        # Extract text from image
+        text = pytesseract.image_to_string(img_out, config = '--psm 11')
+        
+        
+        # Remove any whitespaces from the left and right
+        text = text.strip()
+
+        color = re.search('BLACK|GREEN', text)
+        print(color.group(0))
+
+        btc = int(re.search('d+\.\d+|\d+ \d+|\d+', re.search('(\d+\.\d+|\d+ \d+|\d+) (?:B\w*)', text).group(0)).group(0).replace(' ', '').replace(',', ''))
+        print(btc)
+        msg = Poster()
+        msg.color = color
+        msg.reward = btc
+        msg.face = self.bridge.cv2_imgmsg(face) 
 
     def depth_callback(self,data):
 

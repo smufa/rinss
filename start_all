@@ -1,7 +1,7 @@
 #!/bin/bash
 
 roslaunch task2 rins_world.launch &
-sleep 1
+sleep 3
 roslaunch task2 amcl_simulation.launch &
 sleep 1
 roslaunch turtlebot_rviz_launchers view_navigation.launch &

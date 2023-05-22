@@ -76,5 +76,9 @@
         "valarray": "cpp",
         "variant": "cpp",
         "bit": "cpp"
-    }
+    },
+    "python.analysis.extraPaths": [
+        "/home/nana/ROS/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages"
+    ]
 }

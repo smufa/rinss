@@ -62,9 +62,11 @@ if __name__ == '__main__':
 
     while not rospy.is_shutdown():
         text = st.recognize_speech()
+        print(text)
 
         for color in colors:
             if text.find(color) != -1:
+                print(color)
                 if color == "red":
                     prisonerLocation.red = True
                 if color == "blue":
