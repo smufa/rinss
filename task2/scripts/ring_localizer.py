@@ -5,13 +5,15 @@ import rospy
 import cv2
 import numpy as np
 import tf2_ros
+import tf2_geometry_msgs
 import message_filters
 from sensor_msgs.msg import Image
 from std_msgs.msg import String, Bool
-from geometry_msgs.msg import PointStamped, Vector3, Point
+from geometry_msgs.msg import PointStamped, Vector3, Point, Pose
 from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
+from task2.msg import Poster
 
 
 def distance(p1, p2):
@@ -19,11 +21,11 @@ def distance(p1, p2):
 
 
 class rings:
-    def __init__(self, color, colorname, pose):
+    def __init__(self, color, colorName, pose):
         self.number_of_rings = 4
         self.sample_size = 15
-        self.detectedColor = color
-        self.color = colorname
+        self.detectedColor = colorName
+        self.color = color
         self.poses = [pose]
         self.detections = 1
 
@@ -71,7 +73,7 @@ class The_Ring:
         #subscriber for timestamp synchronizer
         self.image_sub = message_filters.Subscriber("/arm_camera/rgb/image_raw", Image)
         self.depth_sub = message_filters.Subscriber("/arm_camera/depth/image_raw", Image)
-        self.ring_color_sub = rospy.Subscriber("/ring_color", String, self.ring_color_callback)
+        self.ring_color_sub = rospy.Subscriber("/most_wanted", Poster, self.ring_color_callback)
 
         ts = message_filters.TimeSynchronizer([self.image_sub, self.depth_sub], 10)
         ts.registerCallback(self.timestamp_callback)
@@ -88,13 +90,13 @@ class The_Ring:
         self.prison_pub = rospy.Publisher('/prison', Point, queue_size=10)
 
         self.marker_array = MarkerArray()
-        self.ringColor = ''
+        self.ringColor = ""
         self.prisonLocation = Point()
         self.marker_num = 0
         self.known_rings = []
     
     def ring_color_callback(self, msg):
-        self.ringColor = msg.data
+        self.ringColor = msg.color
         self.foundRings()
         return
     
@@ -141,13 +143,13 @@ class The_Ring:
             return
         # Create a Pose object with the same position
         #print("------------------")
+        
         point = Point()
         point.x = point_world.point.x
         point.y = point_world.point.y
         point.z = point_world.point.z
 
         color_name, color = color
-
         # loop thru all known_rings
         detected = False
         for i, ring in enumerate(self.known_rings):
@@ -170,8 +172,9 @@ class The_Ring:
             self.known_rings.append(rings(color, color_name, point))
             self.refresh_markers(len(self.known_rings)-1)
 
-        if self.ringColor == "":
+        if self.ringColor != "":
             self.foundRings()
+            print(self.prisonLocation)
             
     def timestamp_callback(self, rgb_image, depth_image):
         if self.wait_state: return
@@ -210,9 +213,9 @@ class The_Ring:
         candidates = []
         for n in range(len(elps)):
             #print(elps[n])
-            #cv2.ellipse(cv_image, elps[n], (0, 255, 0), 2)
-            #cv2.imshow("Image window",cv_image)
-            #cv2.waitKey(0)
+            # cv2.ellipse(cv_image, elps[n], (0, 255, 0), 2)
+            # cv2.imshow("Image window",cv_image)
+            # cv2.waitKey(0)
 
             for m in range(n + 1, len(elps)):
                 e1 = elps[n]
@@ -340,7 +343,7 @@ class The_Ring:
         for i, ring in enumerate(self.known_rings):
             # if ring.detections > 10:
             avg_pos = ring.get_average_pose()
-            self.marker_array.markers.append(self.add_marker(avg_pos, ring.color_rgb, i))
+            self.marker_array.markers.append(self.add_marker(avg_pos, ring.color, i))
             self.marker_array.markers.append(self.add_text(avg_pos, i))
 
         self.markers_pub.publish(self.marker_array)

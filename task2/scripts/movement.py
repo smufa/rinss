@@ -17,11 +17,12 @@ from actionlib_msgs.msg import GoalStatusArray
 from sound_play.msg import SoundRequest
 from sound_play.libsoundplay import SoundClient
 from std_msgs.msg import Int8, Bool, String
-from task2.msg import GreetingDelta, Greet
-from geometry_msgs.msg import Pose, Twist, Vector3
+from task2.msg import GreetingDelta, Greet, RobberLocations
+from geometry_msgs.msg import Pose, Twist, Vector3, Point
 from tf.transformations import euler_from_quaternion
 from tf.transformations import quaternion_from_euler
 from tf2_msgs.msg import TFMessage
+from task2.srv import isIDPoster
 
 
 class TextToSpeach:
@@ -100,8 +101,19 @@ class Robot:
         self.cylinder_sub = rospy.Subscriber('all_cylinders_detected', Bool, self.all_cylinders_detected)
         self.ring_sub = rospy.Subscriber('all_rings_detected', Pose, self.all_rings_detected)
         
+        self.robber_locations_sub = rospy.Subscriber('robber_locations', RobberLocations, self.robber_locations_callback) # potencialne lokacije roparja
+        self.prison_locaiton_sub = rospy.Subscriber('prison', Point, self.prison_location_callback)
+
         self.movement_client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
         self.movement_client.wait_for_server()   
+
+    def robber_locations_callback(self, msg):
+        if len(msg.locations) == 2:
+            self.suspicious_locations = msg
+            self.state = self.states['cylinder']
+    
+    def prison_location_callback(self, msg):
+        self.prison_location = msg
 
     def park_callback(self, msg):
         self.park_spot = msg.position
@@ -230,6 +242,8 @@ class Robot:
     def correction_callback(self, msg):
         self.distanceToFace = msg.distanceToFace
         self.angleToFace = msg.angleToFace
+        self.isPoster = msg.isPoster.data
+        self.last_face_detection = rospy.Time().now()
 
 
     def move(self):
@@ -254,19 +268,36 @@ class Robot:
 
 
         elif self.state == self.states['greeting']:
-            
-            time_now = rospy.Time().now()
-            duration = rospy.Duration(3.0)
+
+            duration = rospy.Duration(1.5)
 
             twist_msg = Twist()
-            while self.distanceToFace > 0.9 or rospy.Time().now() < (time_now + duration):
+            while self.distanceToFace > 0.9:
+                if rospy.Time().now() > (self.last_face_detection + duration):
+                    msg = Bool()
+                    msg.data = True
+                    rospy.Publisher('delete_last', Bool, queue_size=1).publish(msg)
+                    self.state = self.states['exploring']
+                    print("aborted baby")
+                    return
+
                 twist_msg.angular.z = self.angleToFace
                 twist_msg.linear.x = 0.2
 
                 self.twist_pub.publish(twist_msg)
             
             # when get there
-            self.tts.speak("Hello face number " + str(self.faceID))
+            isposter = False
+            rospy.wait_for_service('isposter')
+            try:
+                is_poster = rospy.ServiceProxy('isposter', isIDPoster)
+                resp = is_poster(self.faceID)
+                isposter = resp.ok
+            except rospy.ServiceException as e:
+                print("Service call failed: %s"%e)
+
+            if not isposter:
+                self.tts.speak("Hello face number " + str(self.faceID))
 
             time_now = rospy.Time().now()
             duration = rospy.Duration(2.0)
@@ -379,34 +410,35 @@ class Robot:
             self.state = self.states['done']
 
         elif self.state == self.states['cylinder']:
-            closest = None
-            min_dist = 99999
-            i = 0
-            closestIndex = 0
-            goal = [self.rings.position.x, self.rings.position.y]
-            for x, y in np.vstack([self.xs, self.ys]).T:
-                dist = self.calculate_distance([x, y], goal)
-                if dist < min_dist:
-                    closest = [x, y]
-                    min_dist = dist
-                    closestIndex = i
+            print("go to cylinders: ", self.suspicious_locations)
+            # closest = None
+            # min_dist = 99999
+            # i = 0
+            # closestIndex = 0
+            # goal = [self.rings.position.x, self.rings.position.y]
+            # for x, y in np.vstack([self.xs, self.ys]).T:
+            #     dist = self.calculate_distance([x, y], goal)
+            #     if dist < min_dist:
+            #         closest = [x, y]
+            #         min_dist = dist
+            #         closestIndex = i
                 
-                i += 1
+            #     i += 1
 
-            self.movement_client.cancel_all_goals()
+            # self.movement_client.cancel_all_goals()
 
-            self.ps.header.stamp = rospy.Time.now()
-            self.ps.pose.position.x = closest[0]
-            self.ps.pose.position.y = closest[1]
-            quaternion = self.quaternion_from_two_points(np.array(closest), np.array([self.rings.position.x, self.rings.position.y]))
+            # self.ps.header.stamp = rospy.Time.now()
+            # self.ps.pose.position.x = closest[0]
+            # self.ps.pose.position.y = closest[1]
+            # quaternion = self.quaternion_from_two_points(np.array(closest), np.array([self.rings.position.x, self.rings.position.y]))
 
-            self.ps.pose.orientation.x = quaternion[0]
-            self.ps.pose.orientation.y = quaternion[1]
-            self.ps.pose.orientation.z = quaternion[2]
-            self.ps.pose.orientation.w = quaternion[3]
+            # self.ps.pose.orientation.x = quaternion[0]
+            # self.ps.pose.orientation.y = quaternion[1]
+            # self.ps.pose.orientation.z = quaternion[2]
+            # self.ps.pose.orientation.w = quaternion[3]
             
-            goal = MoveBaseGoal()
-            goal.target_pose = self.ps
+            # goal = MoveBaseGoal()
+            # goal.target_pose = self.ps
             
 
     def quaternion_from_two_points(self, p1, p2):

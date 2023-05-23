@@ -5,7 +5,7 @@
         <remap from="input" to="/camera/depth/points"/>
     </node>
     <node pkg="task2" type="cylinders.py" name="cylinder_detector"/>
-    <node pkg="task2" type="ring_localizer.py" name="park_spot"/>
+    <node pkg="task2" type="ring_localizer.py" name="rings"/>
     <node pkg="task2" type="move_arm.py" name="move_arm"/>
 
 </launch>

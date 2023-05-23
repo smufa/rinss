@@ -108,12 +108,14 @@ class cylinder_recognizer:
         self.marker_num = 0
     
     def cylinder_colors_callback(self, msg):
-        self.cylinderColors = msg.data.split("")
+        print(msg)
+        self.cylinderColors = msg.data.split(" ")
         self.checkFoundCylinders()
 
     def checkFoundCylinders(self):
         robberLocations = RobberLocations()
 
+        self.robberLocation = []
         for cylinder in self.known_cylinders:
             if cylinder.detectedColor in self.cylinderColors:
                 avg = cylinder.get_average_pose()
@@ -143,15 +145,13 @@ class cylinder_recognizer:
             self.refresh_markers(len(self.known_cylinders)-1)
 
         if len(self.cylinderColors) != 0:
+            print(self.robberLocation)
             self.checkFoundCylinders()
 
-        actualCylinders = 0
-        for cylinder in self.known_cylinders:
-            if cylinder.detections > 1:
-                actualCylinders += 1
-
-        if actualCylinders >= self.known_cylinders[0].number_of_cylinders:
-            self.cylinder_pub.publish(True)
+        # actualCylinders = 0
+        # for cylinder in self.known_cylinders:
+        #     if cylinder.detections > 1:
+        #         actualCylinders += 1
 
     def add_marker(self, pose, color, index):
         new_marker = Marker()

@@ -183,7 +183,7 @@ class face_localizer:
                 msg = GreetingDelta()
                 msg.angleToFace = 0
                 msg.distanceToFace = 0.3
-                msg.isPoster = False
+                msg.isPoster.data = False
 
                 self.greet_pub.publish(msg)
                 break
@@ -212,7 +212,7 @@ class face_localizer:
             # cv2.imshow("kurac", rgb_image[check_y(int(y1 - yrange*1.1)):check_y(int(y2 + yrange*1.1)),check_x(int(x1 - xrange*0.6)):check_x(int(x2 + xrange*0.6))])
             # cv2.waitKey()
             # cv2.destroyAllWindows()
-            poster = self.find_text(cut_img, face_region)
+            poster, reward, prisonColor = self.find_text(cut_img, face_region)
             if poster:
                 print("posteeeer")
                 isPosterFlag = True
@@ -229,7 +229,7 @@ class face_localizer:
                 msg = GreetingDelta()
                 msg.angleToFace = angle
                 msg.distanceToFace = face_distance
-                msg.isPoster = isPosterFlag
+                msg.isPoster.data = isPosterFlag
 
                 self.greet_pub.publish(msg)
                 
@@ -237,8 +237,11 @@ class face_localizer:
                 msg.id = 0
                 msg.faceImage = face_image
                 msg.pose = pose
+                msg.reward = reward
+                msg.prisonColor.data = prisonColor
                 msg.isPoster.data = isPosterFlag
                 
+                print(msg)
                 self.face_and_pose_pub.publish(msg)
 
     def find_text(self, image, face):
@@ -264,11 +267,11 @@ class face_localizer:
 
         color = re.search('BLACK|GREEN|RED|YELLOW', text)
         if color == None or color.group() == '':
-            return False
+            return False, 0, ''
 
         btc = re.search('(\d+\.\d+|\d+ \d+|\d+,\d+|\d+) ((?:B\w*)|(?:\w*C))', text)
         if btc == None or btc.group() == '':
-            return False
+            return False, 0, ''
         else:
             btc = int(btc.group(1).replace(' ', '').replace(',', '').replace('.', ''))
 
@@ -278,7 +281,7 @@ class face_localizer:
         msg.face = self.bridge.cv2_to_imgmsg(face)
 
         self.poster_pub.publish(msg)
-        return True
+        return True, btc, color.group(0)
 
 def main():
         face_finder = face_localizer()

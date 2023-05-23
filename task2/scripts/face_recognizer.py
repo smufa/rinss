@@ -7,21 +7,22 @@ import cv2
 import numpy as np
 import face_recognition
 
-from task2.msg import Greet, Face
+from task2.msg import Greet, Face, Poster
+from task2.srv import isIDPoster, isIDPosterResponse
 from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Pose, Vector3, PoseStamped
-from std_msgs.msg import ColorRGBA, Int8
+from std_msgs.msg import ColorRGBA, Int8, Bool
 
 
 class face_cluster:
-    def __init__(self, embedding, pose):
+    def __init__(self, embedding, pose, reward, prison):
         self.sample_size = 15
         self.embeddings = [embedding]
         self.poses = [pose]
         self.detections = 1
         self.isPoster = False
-        self.price = None
+        self.reward = None
         self.prison = None
         # self.iterator = 0
 
@@ -62,16 +63,28 @@ class face_recognizer:
         rospy.init_node('face_recognizer', anonymous=True)
 
         self.face_sub = rospy.Subscriber("face_and_pose", Face, self.image_callback)
+        self.delete_sub = rospy.Subscriber("delete_last", Bool, self.delete_callback)
+
         self.markers_pub = rospy.Publisher('face_markers', MarkerArray, queue_size=1000)
         self.greet_pub = rospy.Publisher('greet', Greet, queue_size=1000)
+        self.most_wanted_pub = rospy.Publisher('most_wanted', Poster, queue_size=10)
 
+        self.isposter_srv = rospy.Service('isposter', isIDPoster, self.is_poster)
         self.bridge = CvBridge()
 
+        self.mostMoney = 0
         self.known_faces = []
         self.marker_array = MarkerArray()
         self.marker_num = 0
 
+    def delete_callback(self, msg):
+        self.known_faces.pop()
+
+    def is_poster(self, req):
+        return isIDPosterResponse(self.known_faces[req.id].isPoster)
+
     def image_callback(self, msg):
+
         try:
             cv2_image = self.bridge.imgmsg_to_cv2(msg.faceImage)
         except CvBridgeError as e:
@@ -84,9 +97,8 @@ class face_recognizer:
         else:
             return
 
-        print(msg.isPoster.data)
-
         recognized = False
+        prisoner = None
         for i, face_encoding in enumerate(self.known_faces):
             truth_array = np.sum(face_recognition.compare_faces(face_encoding.embeddings, encoding))
             #print("compared faces:", i, face_recognition.compare_faces(face_encoding.embeddings, encoding))
@@ -100,9 +112,19 @@ class face_recognizer:
                 self.known_faces[i].add(encoding, msg.pose)
                 self.refresh_markers(i)
 
+            if (msg.reward != None and face_encoding.reward == None) or (msg.reward != None and face_encoding.reward < msg.reward):
+                self.known_faces[i].reward = msg.reward
+
+            print(face_encoding.reward)
+            if face_encoding.isPoster == True and face_encoding.reward != None  and face_encoding.reward > self.mostMoney:
+                self.mostMoney = face_encoding.reward
+                prisoner = face_encoding
+                print(prisoner)
+                self.most_wanted_pub.publish(prisoner)
+        
         if not recognized:
             print("New face", len(self.known_faces))
-            self.known_faces.append(face_cluster(encoding, msg.pose))
+            self.known_faces.append(face_cluster(encoding, msg.pose, msg.reward, msg.prisonColor))
             if msg.isPoster.data:
                 self.known_faces[-1].isPoster = True
                 print("is poster")
@@ -110,7 +132,7 @@ class face_recognizer:
             self.refresh_markers(len(self.known_faces)-1)
 
             msg = Greet()
-            msg.id = len(self.known_faces)
+            msg.id = len(self.known_faces) - 1
             self.greet_pub.publish(msg)
 
 

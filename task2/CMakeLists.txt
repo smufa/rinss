@@ -7,6 +7,7 @@ find_package(PCL REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS
 	roscpp
+  rospy
 	cv_bridge
 	sensor_msgs
 	nav_msgs
@@ -16,8 +17,9 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_msgs
 	tf2_geometry_msgs
 	pcl_conversions
-  	pcl_msgs
+  pcl_msgs
 	dynamic_reconfigure
+  message_generation
 )
 
 find_package(OpenCV)
@@ -53,6 +55,7 @@ add_message_files(DIRECTORY msg
 add_service_files(
   FILES
   ColorClassifierService.srv
+  isIDPoster.srv
 )
 
 generate_messages(DEPENDENCIES 

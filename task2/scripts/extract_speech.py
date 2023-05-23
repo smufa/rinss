@@ -74,7 +74,7 @@ class SpeechTranscriber:
                     cylinderColors += 'Green '
                 if color == "yellow":
                     cylinderColors += 'Yellow '
-        
+        print(cylinderColors)
         self.cylinder_color_pub.publish(cylinderColors)
 
 def main():
