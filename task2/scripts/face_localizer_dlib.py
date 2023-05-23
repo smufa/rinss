@@ -183,6 +183,7 @@ class face_localizer:
                 msg = GreetingDelta()
                 msg.angleToFace = 0
                 msg.distanceToFace = 0.3
+                msg.isPoster = False
 
                 self.greet_pub.publish(msg)
                 break
@@ -228,6 +229,7 @@ class face_localizer:
                 msg = GreetingDelta()
                 msg.angleToFace = angle
                 msg.distanceToFace = face_distance
+                msg.isPoster = isPosterFlag
 
                 self.greet_pub.publish(msg)
                 
