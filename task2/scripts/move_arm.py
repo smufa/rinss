@@ -43,6 +43,11 @@ class Arm_Mover():
         self.stand.points = [JointTrajectoryPoint(positions=[0,0,0,0],
                                                     time_from_start = rospy.Duration(1))]
 
+        self.cylinder = JointTrajectory()
+        self.cylinder.joint_names = ["arm_shoulder_pan_joint", "arm_shoulder_lift_joint", "arm_elbow_flex_joint", "arm_wrist_flex_joint"]
+        self.cylinder.points = [JointTrajectoryPoint(positions=[0,0.3,1,-0.4],
+                                                    time_from_start = rospy.Duration(1))]
+
     def new_user_command(self, data):
         self.user_command = data.data.strip()
         self.send_command = True
@@ -71,6 +76,9 @@ class Arm_Mover():
                 rospy.sleep(1.5)
                 self.arm_movement_pub.publish(self.stand)
                 print('Waved!')
+            elif self.user_command == 'cylinder':
+                self.arm_movement_pub.publish(self.cylinder)
+                print('Cylinder!')
             else:
                 print('Unknown instruction:', self.user_command)
                 return(-1)

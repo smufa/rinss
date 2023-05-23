@@ -44,6 +44,7 @@ class Robot:
             'idle': 2,
             'parking': 3,
             'fine_parking': 4,
+            'cylinder': 5,
             'done': 10
         }
 
@@ -59,7 +60,7 @@ class Robot:
 
         self.iterator = 0
 
-        self.maxFaces = 3
+        self.maxFaces = 10
         self.faceID = 0
         self.facePos = PoseStamped()
         self.facePos.header.frame_id = "map"
@@ -98,7 +99,7 @@ class Robot:
 
         self.cylinder_sub = rospy.Subscriber('all_cylinders_detected', Bool, self.all_cylinders_detected)
         self.ring_sub = rospy.Subscriber('all_rings_detected', Pose, self.all_rings_detected)
-
+        
         self.movement_client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
         self.movement_client.wait_for_server()   
 
@@ -112,7 +113,7 @@ class Robot:
         return np.linalg.norm(np.array(p1) - np.array(p2))
 
 
-    def generate_goals(self, goal_count):
+    def generate_goals(self, goal_count, seed):
         map_data = rospy.wait_for_message("map", OccupancyGrid)     
 
         scale_factor = 4
@@ -135,7 +136,7 @@ class Robot:
         # plt.show()
 
         # Erode the map a little
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         roaming_area = cv2.erode(roaming_area, kernel)
 
         # plt.imshow(roaming_area, cmap='gray')
@@ -143,15 +144,15 @@ class Robot:
 
         # Calculate the centroids
         roaming_area = list(zip(*np.nonzero(roaming_area)))
-        kmeans = KMeans(n_clusters=goal_count).fit(roaming_area)
+        kmeans = KMeans(n_clusters=goal_count, random_state=seed).fit(roaming_area)
 
         # Rescale goals back to original size
         goals = scale_factor * kmeans.cluster_centers_
         goals[:, [1, 0]] = goals[:, [0, 1]]
 
-        plt.imshow(whole_map, cmap='gray')
-        plt.scatter(goals[:, 0], goals[:, 1], c='r', s=100)
-        plt.show()
+        # plt.imshow(whole_map, cmap='gray')
+        # plt.scatter(goals[:, 0], goals[:, 1], c='r', s=100)
+        # plt.show()
 
         # Move into the navigation frame
         goals[:, 0] = goals[:, 0] * resolution + position.x
@@ -193,7 +194,8 @@ class Robot:
 
 
     def recalculate_angles(self, ordered_goals):
-
+        self.xs = []
+        self.ys = []
         for i in range(len(ordered_goals)):
             self.xs.append(ordered_goals[i][0])
             self.ys.append(ordered_goals[i][1])
@@ -246,13 +248,18 @@ class Robot:
 
                 self.iterator += 1
                 if self.iterator == len(self.xs):
+                    self.loop += 1
+                    self.generate_goals(10 + self.loop % 5 , self.loop)
                     self.iterator = 0
 
 
         elif self.state == self.states['greeting']:
+            
+            time_now = rospy.Time().now()
+            duration = rospy.Duration(3.0)
 
             twist_msg = Twist()
-            while self.distanceToFace > 0.6:
+            while self.distanceToFace > 0.9 or rospy.Time().now() < (time_now + duration):
                 twist_msg.angular.z = self.angleToFace
                 twist_msg.linear.x = 0.2
 
@@ -365,12 +372,42 @@ class Robot:
                 print(dist)
                
                 twist_msg.linear.x = 0.05
-
                 self.twist_pub.publish(twist_msg)
+
             self.tts.speak('beep :(')
             print('parkirou')
             self.state = self.states['done']
 
+        elif self.state == self.states['cylinder']:
+            closest = None
+            min_dist = 99999
+            i = 0
+            closestIndex = 0
+            goal = [self.rings.position.x, self.rings.position.y]
+            for x, y in np.vstack([self.xs, self.ys]).T:
+                dist = self.calculate_distance([x, y], goal)
+                if dist < min_dist:
+                    closest = [x, y]
+                    min_dist = dist
+                    closestIndex = i
+                
+                i += 1
+
+            self.movement_client.cancel_all_goals()
+
+            self.ps.header.stamp = rospy.Time.now()
+            self.ps.pose.position.x = closest[0]
+            self.ps.pose.position.y = closest[1]
+            quaternion = self.quaternion_from_two_points(np.array(closest), np.array([self.rings.position.x, self.rings.position.y]))
+
+            self.ps.pose.orientation.x = quaternion[0]
+            self.ps.pose.orientation.y = quaternion[1]
+            self.ps.pose.orientation.z = quaternion[2]
+            self.ps.pose.orientation.w = quaternion[3]
+            
+            goal = MoveBaseGoal()
+            goal.target_pose = self.ps
+            
 
     def quaternion_from_two_points(self, p1, p2):
         direction = p2 - p1
@@ -384,21 +421,13 @@ class Robot:
         self.faceID = msg.id
 
     def all_cylinders_detected(self, msg):
-        # print('Cylinders:')
-        # print(msg)
-        # print(self.rings)
-        # print(self.cylinders)
         self.cylinders = msg.data
         if self.rings:
             self.state = self.states['parking']
 
 
     def all_rings_detected(self, msg):
-        # print('Ring pose:')
-        # print(msg)
         self.rings = msg
-        # print(self.rings)
-        # print(self.cylinders)
         if self.cylinders:
             self.state = self.states['parking']
 
@@ -407,12 +436,14 @@ class Robot:
 def main():
         robot = Robot()
         rate = rospy.Rate(10)
-        robot.generate_goals(15)
-
+        
+        robot.loop = 0
+        robot.generate_goals(12, robot.loop)
         while not rospy.is_shutdown():
             robot.move()
             rate.sleep()
 
+            
 
 if __name__ == '__main__':
     main()

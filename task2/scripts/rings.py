@@ -203,6 +203,7 @@ def main():
 
     rate = rospy.Rate(1)
     while not rospy.is_shutdown():
+        print('delam')
         rate.sleep()
     
 if __name__ == '__main__':

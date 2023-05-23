@@ -20,6 +20,9 @@ class face_cluster:
         self.embeddings = [embedding]
         self.poses = [pose]
         self.detections = 1
+        self.isPoster = False
+        self.price = None
+        self.prison = None
         # self.iterator = 0
 
     def add(self, embedding, pose):
@@ -40,7 +43,7 @@ class face_cluster:
             if p is not None:
                 xSum += p.position.x
                 ySum += p.position.y
-                zSum += p.position.z
+                zSum += p.position.z        
             else: 
                 print("NoneType sm dobu")
         
@@ -81,6 +84,8 @@ class face_recognizer:
         else:
             return
 
+        print(msg.isPoster.data)
+
         recognized = False
         for i, face_encoding in enumerate(self.known_faces):
             truth_array = np.sum(face_recognition.compare_faces(face_encoding.embeddings, encoding))
@@ -88,13 +93,20 @@ class face_recognizer:
 
             if truth_array > len(face_encoding.embeddings)*0.5:
                 recognized = True
+                if msg.isPoster.data:
+                    self.known_faces[i].isPoster = True
+                    print("is poster")
+  
                 self.known_faces[i].add(encoding, msg.pose)
                 self.refresh_markers(i)
 
         if not recognized:
             print("New face", len(self.known_faces))
-            
             self.known_faces.append(face_cluster(encoding, msg.pose))
+            if msg.isPoster.data:
+                self.known_faces[-1].isPoster = True
+                print("is poster")
+
             self.refresh_markers(len(self.known_faces)-1)
 
             msg = Greet()
@@ -102,7 +114,7 @@ class face_recognizer:
             self.greet_pub.publish(msg)
 
 
-    def add_marker(self, pose, index):
+    def add_marker(self, pose, poster):
         new_marker = Marker()
         new_marker.header.stamp = rospy.Time(0)
         new_marker.header.frame_id = 'map'
@@ -113,7 +125,10 @@ class face_recognizer:
         new_marker.lifetime = rospy.Time(0)
         new_marker.id = self.marker_num
         new_marker.scale = Vector3(0.3, 0.3, 0.3)
-        new_marker.color = ColorRGBA(1, 0, 0, 0.7)
+        if poster:
+            new_marker.color = ColorRGBA(0.95, 0.45, 0.03, 0.7)
+        else:
+            new_marker.color = ColorRGBA(1, 0, 1, 0.7)
 
         self.marker_num += 1
         return new_marker
@@ -144,7 +159,7 @@ class face_recognizer:
 
         for i, faces in enumerate(self.known_faces):
             avg_pos = faces.get_average_pose()
-            self.marker_array.markers.append(self.add_marker(avg_pos, i))
+            self.marker_array.markers.append(self.add_marker(avg_pos, faces.isPoster))
             self.marker_array.markers.append(self.add_text(avg_pos, i))
 
         self.markers_pub.publish(self.marker_array)

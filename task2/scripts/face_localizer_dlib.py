@@ -10,6 +10,7 @@ import tf2_geometry_msgs
 import tf2_ros
 import pytesseract
 import re
+import math
 
 #import matplotlib.pyplot as plt
 from sensor_msgs.msg import Image
@@ -28,19 +29,19 @@ class face_localizer:
 
         # The function for performin HOG face detection
         self.face_detector = dlib.get_frontal_face_detector()
-
+    
         # A help variable for holding the dimensions of the image
         self.dims = (0, 0, 0)
 
         # Publiser for the visualization markers
-        self.face_pub = rospy.Publisher('captured_face', Image, queue_size=1000)
-        self.face_and_pose_pub = rospy.Publisher('face_and_pose', Face, queue_size=1000)
+        self.face_pub = rospy.Publisher('captured_face', Image, queue_size=1)
+        self.face_and_pose_pub = rospy.Publisher('face_and_pose', Face, queue_size=1)
 
-        #Posteer
+        #Poster
         self.poster_pub = rospy.Publisher('poster', Poster, queue_size=1)
 
         # Publisher for greeting delta
-        self.greet_pub = rospy.Publisher('greeting_delta', GreetingDelta, queue_size=1000)
+        self.greet_pub = rospy.Publisher('greeting_delta', GreetingDelta, queue_size=1)
 
         # Object we use for transforming between coordinate frames
         self.tf_buf = tf2_ros.Buffer()
@@ -129,30 +130,91 @@ class face_localizer:
         # Do histogram equlization
         #img = cv2.equalizeHist(gray)
 
-        # Detect the faces in the image
-        face_rectangles = self.face_detector(rgb_image, 0)
+        # cv2.imshow("slika fak", depth_image)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+    
+        #depth_image[np.isnan(depth_image)] = np.nanmax(depth_image)
+        # cv2.imshow("slika fak", depth_image)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
 
+        # Detect the faces in the image
+        scale_factor = 2
+        upsampled_img = cv2.resize(rgb_image, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_CUBIC)
+        upsampled_depth_image = cv2.resize(depth_image, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_CUBIC)
+
+        # print(upsampled_depth_image.size)
+        # print(np.count_nonzero(np.isnan(upsampled_depth_image)))
+        face_rectangles = self.face_detector(upsampled_img, 0)
+
+        isPosterFlag = False
         # For each detected face, extract the depth from the depth image
         for face_rectangle in face_rectangles:
             print('Faces were detected')
-            self.find_text(rgb_image, face_rectangle)
 
             # The coordinates of the rectanle
-            x1 = face_rectangle.left()
-            x2 = face_rectangle.right()
-            y1 = face_rectangle.top()
-            y2 = face_rectangle.bottom()
+            x1 = face_rectangle.left() // scale_factor
+            x2 = face_rectangle.right() // scale_factor 
+            y1 = face_rectangle.top() // scale_factor
+            y2 = face_rectangle.bottom() // scale_factor
 
             # Extract region containing face
             face_region = rgb_image[y1:y2,x1:x2]
+            # cv2.imshow("neki", face_region)
+            # cv2.waitKey()
+            # cv2.destroyAllWindows()
 
             # Find the distance to the detected face
-            face_distance = float(np.nanmean(depth_image[y1:y2,x1:x2]))
+            # cv2.imshow("neki", depth_image)
+            # cv2.waitKey()
+            # cv2.destroyAllWindows()
+            if depth_image[y1:y2, x1:x2].all() == np.nan:
+                break
+            face_distance = float(np.nanmean(depth_image[y1:y2, x1:x2]))
+
             try:
                 face_image = self.bridge.cv2_to_imgmsg(face_region)
                 self.face_pub.publish(face_image)
             except CvBridgeError as e:
                 print(e)
+
+            if face_distance >= 1.7 or math.isnan(face_distance):
+                msg = GreetingDelta()
+                msg.angleToFace = 0
+                msg.distanceToFace = 0.3
+
+                self.greet_pub.publish(msg)
+                break
+            
+            def check_y(number):
+                ymax, _, _ = rgb_image.shape
+                if number <= 0:
+                    return 0
+                if number >= ymax:
+                    return ymax - 1
+                return number
+            
+            def check_x(number):
+                _, xmax, _ = rgb_image.shape
+                if number <= 0:
+                    return 0
+                if number >= xmax:
+                    return xmax - 1
+                return number
+
+            xrange = x2 - x1
+            yrange = y2 - y1
+            cut_img = rgb_image[check_y(int(y1 - yrange*1.1)):check_y(int(y2 + yrange*1.1)),check_x(int(x1 - xrange*0.6)):check_x(int(x2 + xrange*0.6))]
+            cut_img = cv2.resize(cut_img, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+
+            # cv2.imshow("kurac", rgb_image[check_y(int(y1 - yrange*1.1)):check_y(int(y2 + yrange*1.1)),check_x(int(x1 - xrange*0.6)):check_x(int(x2 + xrange*0.6))])
+            # cv2.waitKey()
+            # cv2.destroyAllWindows()
+            poster = self.find_text(cut_img, face_region)
+            if poster:
+                print("posteeeer")
+                isPosterFlag = True
 
             print('Distance to face', face_distance)
 
@@ -168,12 +230,13 @@ class face_localizer:
                 msg.distanceToFace = face_distance
 
                 self.greet_pub.publish(msg)
-
+                
                 msg = Face()
                 msg.id = 0
                 msg.faceImage = face_image
                 msg.pose = pose
-
+                msg.isPoster.data = isPosterFlag
+                
                 self.face_and_pose_pub.publish(msg)
 
     def find_text(self, image, face):
@@ -185,6 +248,10 @@ class face_localizer:
         
         # Use Otsu's thresholding
         #ret,img_out = cv2.threshold(img_out,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        
+        # cv2.imshow("kurac", img_out)
+        # cv2.waitKey()
+        # cv2.destroyAllWindows()
     
         # Extract text from image
         text = pytesseract.image_to_string(img_out, config = '--psm 11')
@@ -193,36 +260,23 @@ class face_localizer:
         # Remove any whitespaces from the left and right
         text = text.strip()
 
-        color = re.search('BLACK|GREEN', text)
-        print(color.group(0))
+        color = re.search('BLACK|GREEN|RED|YELLOW', text)
+        if color == None or color.group() == '':
+            return False
 
-        btc = int(re.search('d+\.\d+|\d+ \d+|\d+', re.search('(\d+\.\d+|\d+ \d+|\d+) (?:B\w*)', text).group(0)).group(0).replace(' ', '').replace(',', ''))
-        print(btc)
+        btc = re.search('(\d+\.\d+|\d+ \d+|\d+,\d+|\d+) ((?:B\w*)|(?:\w*C))', text)
+        if btc == None or btc.group() == '':
+            return False
+        else:
+            btc = int(btc.group(1).replace(' ', '').replace(',', '').replace('.', ''))
+
         msg = Poster()
-        msg.color = color
+        msg.color = color.group(0)
         msg.reward = btc
-        msg.face = self.bridge.cv2_imgmsg(face) 
+        msg.face = self.bridge.cv2_to_imgmsg(face)
 
-    def depth_callback(self,data):
-
-        try:
-            depth_image = self.bridge.imgmsg_to_cv2(data, "32FC1")
-        except CvBridgeError as e:
-            print(e)
-
-        # Do the necessairy conversion so we can visuzalize it in OpenCV
-        
-        image_1 = depth_image / np.nanmax(depth_image)
-        image_1 = image_1*255
-        
-        image_viz = np.array(image_1, dtype=np.uint8)
-
-        #cv2.imshow("Depth window", image_viz)
-        #cv2.waitKey(1)
-
-        #plt.imshow(depth_image)
-        #plt.show()
-
+        self.poster_pub.publish(msg)
+        return True
 
 def main():
         face_finder = face_localizer()
