@@ -6,10 +6,9 @@ import dlib
 import numpy as np
 import cv2
 
-from sensor_msgs.msg import Image
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import PointStamped, Vector3, Point, Pose
-from std_msgs.msg import ColorRGBA, String, Bool
+from geometry_msgs.msg import Vector3, Point, Pose
+from std_msgs.msg import ColorRGBA, String
 from task2.msg import ColorAndPose
 
 class rings:

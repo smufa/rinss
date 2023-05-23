@@ -46,7 +46,7 @@ add_message_files(DIRECTORY msg
 	GreetingDelta.msg
 	Greet.msg
 	ColorAndPose.msg
-  PrisonerLocation.msg
+  RobberLocations.msg
   Poster.msg
 )
 

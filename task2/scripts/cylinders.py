@@ -10,7 +10,7 @@ from sensor_msgs.msg import Image
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import PointStamped, Vector3, Point, Pose
 from std_msgs.msg import ColorRGBA, String, Bool
-from task2.msg import ColorAndPose
+from task2.msg import ColorAndPose, RobberLocations
 
 class cylinders:
     def __init__(self, color, pose, speak_node):
@@ -95,14 +95,34 @@ class cylinder_recognizer:
         rospy.init_node('cylinder', anonymous=True)
 
         self.markers_pub = rospy.Publisher('cylinder_markers', MarkerArray, queue_size=1000)
-        self.cylinder_sub = rospy.Subscriber('cylinder_detected', ColorAndPose, self.cylinder_detected_callback)
         self.sound_pub = rospy.Publisher('speak', String, queue_size=1000)
-        self.cylinder_pub = rospy.Publisher('all_cylinders_detected', Bool, queue_size=1000)
+        self.robber_locations_pub = rospy.Publisher('robber_locations', RobberLocations, queue_size=10)
 
+        self.cylinder_sub = rospy.Subscriber('cylinder_detected', ColorAndPose, self.cylinder_detected_callback)
+        self.cylinder_colors_sub = rospy.Subscriber('cylinder_colors', String, self.cylinder_colors_callback)
+
+        self.robberLocation = []
+        self.cylinderColors = []
         self.known_cylinders = []
         self.marker_array = MarkerArray()
         self.marker_num = 0
     
+    def cylinder_colors_callback(self, msg):
+        self.cylinderColors = msg.data.split("")
+        self.checkFoundCylinders()
+
+    def checkFoundCylinders(self):
+        robberLocations = RobberLocations()
+
+        for cylinder in self.known_cylinders:
+            if cylinder.detectedColor in self.cylinderColors:
+                avg = cylinder.get_average_pose()
+                self.robberLocation.append(avg)
+                robberLocations.locations.append(avg)
+        
+        self.robber_locations_pub.publish(robberLocations)
+        return
+
     def cylinder_detected_callback(self, msg):
 
         detected = False
@@ -122,12 +142,14 @@ class cylinder_recognizer:
             self.known_cylinders.append(cylinders(msg.color, msg.pose.point, self.sound_pub))
             self.refresh_markers(len(self.known_cylinders)-1)
 
+        if len(self.cylinderColors) != 0:
+            self.checkFoundCylinders()
+
         actualCylinders = 0
         for cylinder in self.known_cylinders:
             if cylinder.detections > 1:
                 actualCylinders += 1
 
-        print(actualCylinders)
         if actualCylinders >= self.known_cylinders[0].number_of_cylinders:
             self.cylinder_pub.publish(True)
 

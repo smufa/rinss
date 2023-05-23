@@ -8,13 +8,10 @@ import tf2_ros
 import message_filters
 from sensor_msgs.msg import Image
 from std_msgs.msg import String, Bool
-import tf2_geometry_msgs
-from geometry_msgs.msg import PointStamped, Vector3, Pose, Point
+from geometry_msgs.msg import PointStamped, Vector3, Point
 from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
-from matplotlib import pyplot as plt
-from sound_play.libsoundplay import SoundClient
 
 
 def distance(p1, p2):
@@ -25,7 +22,7 @@ class rings:
     def __init__(self, color, colorname, pose):
         self.number_of_rings = 4
         self.sample_size = 15
-        self.color_rgb = color
+        self.detectedColor = color
         self.color = colorname
         self.poses = [pose]
         self.detections = 1
@@ -74,6 +71,8 @@ class The_Ring:
         #subscriber for timestamp synchronizer
         self.image_sub = message_filters.Subscriber("/arm_camera/rgb/image_raw", Image)
         self.depth_sub = message_filters.Subscriber("/arm_camera/depth/image_raw", Image)
+        self.ring_color_sub = rospy.Subscriber("/ring_color", String, self.ring_color_callback)
+
         ts = message_filters.TimeSynchronizer([self.image_sub, self.depth_sub], 10)
         ts.registerCallback(self.timestamp_callback)
 
@@ -86,11 +85,28 @@ class The_Ring:
 
         # markers
         self.markers_pub = rospy.Publisher('/ring_markers', MarkerArray, queue_size=10)
+        self.prison_pub = rospy.Publisher('/prison', Point, queue_size=10)
 
         self.marker_array = MarkerArray()
+        self.ringColor = ''
+        self.prisonLocation = Point()
         self.marker_num = 0
         self.known_rings = []
-	
+    
+    def ring_color_callback(self, msg):
+        self.ringColor = msg.data
+        self.foundRings()
+        return
+    
+    def foundRings(self):
+        for ring in self.known_rings:
+            if ring.detectedColor == self.ringColor:
+                self.prisonLocation = ring.get_average_pose()
+        
+        self.prison_pub.publish(self.prisonLocation)
+        return
+
+
     def wait_status(self, msg):
         self.wait_state = msg.data
 
@@ -154,6 +170,9 @@ class The_Ring:
             self.known_rings.append(rings(color, color_name, point))
             self.refresh_markers(len(self.known_rings)-1)
 
+        if self.ringColor == "":
+            self.foundRings()
+            
     def timestamp_callback(self, rgb_image, depth_image):
         if self.wait_state: return
         time = rgb_image.header.stamp
