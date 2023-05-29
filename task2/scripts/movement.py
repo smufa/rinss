@@ -269,19 +269,19 @@ class Robot:
 
         elif self.state == self.states['greeting']:
 
-            duration = rospy.Duration(1.5)
+            duration = rospy.Duration(3) # 1.5
 
             twist_msg = Twist()
-            while self.distanceToFace > 0.9:
-                if rospy.Time().now() > (self.last_face_detection + duration):
-                    msg = Bool()
-                    msg.data = True
-                    rospy.Publisher('delete_last', Bool, queue_size=1).publish(msg)
-                    self.state = self.states['exploring']
-                    print("aborted baby")
-                    return
+            while self.distanceToFace > 0.8:
+                # if rospy.Time().now() > (self.last_face_detection + duration):
+                #     msg = Bool()
+                #     msg.data = True
+                #     rospy.Publisher('delete_last', Bool, queue_size=1).publish(msg)
+                #     self.state = self.states['exploring']
+                #     print("aborted baby")
+                #     return
 
-                twist_msg.angular.z = self.angleToFace
+                twist_msg.angular.z = self.angleToFace * 1.1
                 twist_msg.linear.x = 0.2
 
                 self.twist_pub.publish(twist_msg)

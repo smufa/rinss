@@ -11,29 +11,32 @@ from task2.msg import Greet, Face, Poster
 from task2.srv import isIDPoster, isIDPosterResponse
 from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Pose, Vector3, PoseStamped
+from geometry_msgs.msg import Pose, Vector3, PoseStamped, Point
 from std_msgs.msg import ColorRGBA, Int8, Bool
 
 
 class face_cluster:
-    def __init__(self, embedding, pose, reward, prison):
+    def __init__(self, embedding, faceImage, pose, reward, prison):
         self.sample_size = 15
         self.embeddings = [embedding]
+        self.face_images = [faceImage]
         self.poses = [pose]
         self.detections = 1
         self.isPoster = False
-        self.reward = None
-        self.prison = None
+        self.reward = reward
+        self.prison = prison
         # self.iterator = 0
 
-    def add(self, embedding, pose):
+    def add(self, embedding, faceImage, pose):
         self.detections += 1
         if len(self.embeddings) > self.sample_size:
             del self.embeddings[0]
             del self.poses[0]
+            del self.face_images[0]
 
         self.embeddings.append(embedding)
         self.poses.append(pose)
+        self.face_images.append(faceImage)
     
     def get_average_pose(self):
         xSum = 0
@@ -99,32 +102,50 @@ class face_recognizer:
 
         recognized = False
         prisoner = None
+
         for i, face_encoding in enumerate(self.known_faces):
             truth_array = np.sum(face_recognition.compare_faces(face_encoding.embeddings, encoding))
             #print("compared faces:", i, face_recognition.compare_faces(face_encoding.embeddings, encoding))
+            p1 = Point()
+            p1 = msg.pose.position
+            p2 = face_encoding.get_average_pose().position
 
-            if truth_array > len(face_encoding.embeddings)*0.5:
-                recognized = True
-                if msg.isPoster.data:
-                    self.known_faces[i].isPoster = True
-                    print("is poster")
-  
-                self.known_faces[i].add(encoding, msg.pose)
-                self.refresh_markers(i)
+            distance = np.linalg.norm(np.array([p1.x, p1.y, p1.z]) - np.array([p2.x, p2.y, p2.z]))
+
+            if truth_array > len(face_encoding.embeddings)*0.7:
+                if distance < 0.5:
+                    recognized = True
+                    if msg.isPoster.data:
+                        self.known_faces[i].isPoster = True
+                        print("is poster")
+
+                    self.known_faces[i].add(encoding, msg.faceImage, msg.pose)
+                    self.refresh_markers(i)
 
             if (msg.reward != None and face_encoding.reward == None) or (msg.reward != None and face_encoding.reward < msg.reward):
                 self.known_faces[i].reward = msg.reward
 
-            print(face_encoding.reward)
-            if face_encoding.isPoster == True and face_encoding.reward != None  and face_encoding.reward > self.mostMoney:
+            if (msg.prisonColor.data != '' and face_encoding.prison.data == ''):
+                self.known_faces[i].prison.data = msg.prisonColor.data 
+
+            if face_encoding.isPoster == True and face_encoding.reward != None  and face_encoding.reward >= self.mostMoney:
                 self.mostMoney = face_encoding.reward
-                prisoner = face_encoding
-                print(prisoner)
+
+                prisoner = Poster()
+                prisoner.face = face_encoding.face_images[0]
+                prisoner.reward = face_encoding.reward
+                prisoner.color.data = face_encoding.prison.data
+
+                print(face_encoding.prison)
+
+                print('dajem na topic')
+                # print(prisoner)
+
                 self.most_wanted_pub.publish(prisoner)
         
         if not recognized:
             print("New face", len(self.known_faces))
-            self.known_faces.append(face_cluster(encoding, msg.pose, msg.reward, msg.prisonColor))
+            self.known_faces.append(face_cluster(encoding, msg.faceImage, msg.pose, msg.reward, msg.prisonColor))
             if msg.isPoster.data:
                 self.known_faces[-1].isPoster = True
                 print("is poster")

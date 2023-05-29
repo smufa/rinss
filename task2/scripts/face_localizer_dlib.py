@@ -206,6 +206,9 @@ class face_localizer:
 
             xrange = x2 - x1
             yrange = y2 - y1
+
+            #cut_img = rgb_image[y1-50:y2+100, x1-50:x2+50]
+
             cut_img = rgb_image[check_y(int(y1 - yrange*1.1)):check_y(int(y2 + yrange*1.1)),check_x(int(x1 - xrange*0.6)):check_x(int(x2 + xrange*0.6))]
             cut_img = cv2.resize(cut_img, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
 
@@ -241,18 +244,19 @@ class face_localizer:
                 msg.prisonColor.data = prisonColor
                 msg.isPoster.data = isPosterFlag
                 
-                print(msg)
                 self.face_and_pose_pub.publish(msg)
 
     def find_text(self, image, face):
+
         # Convert the image to grayscale
         img_out = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         # Option 1 - use adaptive thresholding
         img_out = cv2.adaptiveThreshold(img_out,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,11,5)
-        
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        # img_out = cv2.erode(img_out, kernel)
         # Use Otsu's thresholding
-        #ret,img_out = cv2.threshold(img_out,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        #ret, img_out = cv2.threshold(img_out,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         
         # cv2.imshow("kurac", img_out)
         # cv2.waitKey()
@@ -260,14 +264,16 @@ class face_localizer:
     
         # Extract text from image
         text = pytesseract.image_to_string(img_out, config = '--psm 11')
+        #print(text)
         
         
         # Remove any whitespaces from the left and right
         text = text.strip()
 
-        color = re.search('BLACK|GREEN|RED|YELLOW', text)
+        color = re.search('BLACK|GREEN|RED|YELLOW|BLUE', text)
         if color == None or color.group() == '':
             return False, 0, ''
+        print(color.group(0))
 
         btc = re.search('(\d+\.\d+|\d+ \d+|\d+,\d+|\d+) ((?:B\w*)|(?:\w*C))', text)
         if btc == None or btc.group() == '':

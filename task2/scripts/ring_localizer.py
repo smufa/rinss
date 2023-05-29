@@ -156,15 +156,14 @@ class The_Ring:
             p2 = ring.get_average_pose()
             distance = np.linalg.norm(np.array([p1.x, p1.y, p1.z]) - np.array([p2.x, p2.y, p2.z]))
 
-            if distance < 0.6:
+            if color_name == ring.detectedColor:
                 detected = True
-                self.known_rings[i].add(point)
+                if distance < 0.4:
+                    self.known_rings[i].add(point)
 
-                if self.known_rings[i].detections%10 == 0:
-                    self.refresh_markers(i)
-
-                break
-
+                    if self.known_rings[i].detections%10 == 0:
+                        self.refresh_markers(i)
+                    
         if not detected:
             print("New ring", len(self.known_rings))
             
@@ -196,7 +195,9 @@ class The_Ring:
         img = cv2.equalizeHist(gray)
 
         # Binarize the image, there are different ways to do it
-        thresh = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, 25)
+        thresh = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 5)
+        # cv2.imshow("Image window",thresh)
+        # cv2.waitKey(0)
         # Extract contours
         contours, hierarchy = cv2.findContours(thresh[0:420, :], cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 
@@ -289,9 +290,8 @@ class The_Ring:
                 #print(color, sat)
                 
                 self.get_pose(e1, nandepth, (name, marker_color), time)
-                #plt.show()
-                #cv2.imshow("center", color)
-                #cv2.waitKey(0)
+                # cv2.imshow("center", color)
+                # cv2.waitKey(0)
 
     def add_marker(self, pose, color, index):
         color = ColorRGBA(*color)
