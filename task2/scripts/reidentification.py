@@ -36,19 +36,6 @@ class face_comparer:
             except CvBridgeError as e:
                 print(e)
                 return 
-            
-            print('most wanted')
-
-            # encode wanted image
-            wanted_encoding = face_recognition.face_encodings(cv2_image)
-            if len(wanted_encoding) != 0:
-                print('nasu wanted faco')
-
-                wanted_encoding = wanted_encoding[0]
-            else:
-                print('nism nasu wanted faco')
-
-                return
 
             # get camera image
             try:
@@ -57,7 +44,6 @@ class face_comparer:
                 print(e)
                 return
 
-            print('dobim image')
             # transform camera image to cv2
             try:
                 rgb_image = self.bridge.imgmsg_to_cv2(rgb_image_message, "bgr8")
@@ -65,43 +51,51 @@ class face_comparer:
                 print(e)
                 return
 
-            face_rectangles = self.face_detector(rgb_image, 0)
+            # rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2GRAY)
+            # cv2_image = cv2.cvtColor(cv2_image, cv2.COLOR_BGR2GRAY)
 
-            cv2.imshow('yooho', rgb_image)
-            cv2.waitKey()
-            
-            for face_rectangle in face_rectangles:
-                print('dlib found')
-                x1 = face_rectangle.left()
-                x2 = face_rectangle.right() 
-                y1 = face_rectangle.top()
-                y2 = face_rectangle.bottom()
+            face_cascade = cv2.CascadeClassifier('/home/nana/ROS/srcLanTask1/exercise4/scripts/haarcascade_frontalface_default.xml')
+            faces = face_cascade.detectMultiScale(rgb_image, scaleFactor=1.01, minNeighbors=7)
 
-                # Extract region containing face
-                face_region = rgb_image[y1:y2,x1:x2]
-
-                cv2.imshow('yooho', face_region)
-                cv2.waitKey()
-
-            # encode camera image
-            camera_encoding = face_recognition.face_encodings(rgb_image)
-            if len(camera_encoding) != 0:
-                camera_encoding = camera_encoding[0]
-            else:
-                print('nism nausu sm faco')
-                return
-
-            
-            # Compare the face encodings
-            results = face_recognition.compare_faces([wanted_encoding], camera_encoding)
+            offset = 10
             bool_msg = Bool()
-            if results[0]:
-                bool_msg.data = True
-                # return "The faces match. Reidentified as the same person."
-            else:
-                bool_msg.data = False
-                # return "The faces do not match. Not the same person."
-            print("Result:", bool_msg)
+            bool_msg.data = False
+            
+            for (x, y, w, h) in faces:
+                adjusted = rgb_image[y-offset:y+h+offset,x-offset:x+w+offset]
+
+                height, width = adjusted.shape[:2]
+
+                # alpha = 3  # contrast:  [0,1) => lower    [1,] => higher
+                # beta = 2   # brightness
+                # adjusted = cv2.convertScaleAbs(adjusted, alpha, beta)
+                
+                cv2.imshow('zaznana faca', adjusted)
+                cv2.waitKey(0)
+                cv2.imshow('Wanted faca', cv2_image)
+                cv2.waitKey(0)
+
+                histogram1 = cv2.calcHist([adjusted], [0], None, [256], [0, 256])
+                histogram2 = cv2.calcHist([cv2_image], [0], None, [256], [0, 256])
+
+                # Normalize the histograms (optional)
+                histogram1 = cv2.normalize(histogram1, histogram1, 0, 1, cv2.NORM_MINMAX)
+                histogram2 = cv2.normalize(histogram2, histogram2, 0, 1, cv2.NORM_MINMAX)
+
+                # Calculate the histogram similarity using the Bhattacharyya coefficient
+                similarity = cv2.compareHist(histogram1, histogram2, cv2.HISTCMP_BHATTACHARYYA)
+
+                if similarity < 0.6:
+                    bool_msg.data = True
+                    # return "The faces match. Reidentified as the same person."
+                else:
+                    bool_msg.data = False
+                    # return "The faces do not match. Not the same person."
+                print("Result:", bool_msg)
+
+                rospy.sleep(2)
+                self.face_compare_pub.publish(bool_msg)
+            print('ni fac')
             self.face_compare_pub.publish(bool_msg)
 
 

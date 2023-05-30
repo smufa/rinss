@@ -106,6 +106,7 @@ class face_recognizer:
         for i, face_encoding in enumerate(self.known_faces):
             truth_array = np.sum(face_recognition.compare_faces(face_encoding.embeddings, encoding))
             #print("compared faces:", i, face_recognition.compare_faces(face_encoding.embeddings, encoding))
+            
             p1 = Point()
             p1 = msg.pose.position
             p2 = face_encoding.get_average_pose().position
@@ -115,19 +116,19 @@ class face_recognizer:
             if truth_array > len(face_encoding.embeddings)*0.7:
                 if distance < 0.5:
                     recognized = True
+
                     if msg.isPoster.data:
                         self.known_faces[i].isPoster = True
-                        print("is poster")
+
+                        if (msg.reward != None and face_encoding.reward == None) or (msg.reward != None and face_encoding.reward < msg.reward):
+                            self.known_faces[i].reward = msg.reward
+
+                        if (msg.prisonColor.data != '' and face_encoding.prison.data == ''):
+                            self.known_faces[i].prison.data = msg.prisonColor.data 
 
                     self.known_faces[i].add(encoding, msg.faceImage, msg.pose)
                     self.refresh_markers(i)
-
-            if (msg.reward != None and face_encoding.reward == None) or (msg.reward != None and face_encoding.reward < msg.reward):
-                self.known_faces[i].reward = msg.reward
-
-            if (msg.prisonColor.data != '' and face_encoding.prison.data == ''):
-                self.known_faces[i].prison.data = msg.prisonColor.data 
-
+        
             if face_encoding.isPoster == True and face_encoding.reward != None  and face_encoding.reward >= self.mostMoney:
                 self.mostMoney = face_encoding.reward
 
@@ -136,19 +137,16 @@ class face_recognizer:
                 prisoner.reward = face_encoding.reward
                 prisoner.color.data = face_encoding.prison.data
 
-                print(face_encoding.prison)
-
-                print('dajem na topic')
-                # print(prisoner)
-
+                print(prisoner)
+                
                 self.most_wanted_pub.publish(prisoner)
-        
+
         if not recognized:
             print("New face", len(self.known_faces))
+
             self.known_faces.append(face_cluster(encoding, msg.faceImage, msg.pose, msg.reward, msg.prisonColor))
             if msg.isPoster.data:
                 self.known_faces[-1].isPoster = True
-                print("is poster")
 
             self.refresh_markers(len(self.known_faces)-1)
 

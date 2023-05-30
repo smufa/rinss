@@ -59,6 +59,7 @@ class SpeechTranscriber:
         if msgtext == "listen":
             text = self.recognize_speech()
         else:
+            rospy.sleep(5)
             text = msgtext
 
         cylinderColors = ""
