@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
-
+# from keras_facenet import FaceNet
+print('tu')
 def compare_faces(img1_path, img2_path):
     # Load the images
     img = cv2.imread(img1_path, cv2.IMREAD_GRAYSCALE)
@@ -9,7 +10,7 @@ def compare_faces(img1_path, img2_path):
     face_cascade = cv2.CascadeClassifier('/home/nana/ROS/srcLanTask1/exercise4/scripts/haarcascade_frontalface_default.xml')
     faces = face_cascade.detectMultiScale(img, scaleFactor=1.01, minNeighbors=10)
     faces_wanted = face_cascade.detectMultiScale(wantedImg, scaleFactor=1.01, minNeighbors=7)
-    sift = cv2.SIFT_create()
+    print('tu')
 
     offset = 10
     for (x, y, w, h) in faces:
@@ -25,31 +26,28 @@ def compare_faces(img1_path, img2_path):
         cv2.waitKey(0)
 
         for(x2, y2, w2, h2) in faces_wanted:
+            print('tu')
             adjusted2 = wantedImg[y2-offset:y2+h2+offset,x2-offset:x2+w2+offset]
             height2, width2 = adjusted2.shape[:2]
             size2 = height2 * width2
             cv2.imshow('face wanted', adjusted2)
             cv2.waitKey(0)
-
+            print('tu')
             if size < size2: #
                 adjusted = cv2.resize(adjusted, (width2, height2), interpolation=cv2.INTER_CUBIC)
             else:
                 adjusted2 = cv2.resize(adjusted2, (width, height), interpolation=cv2.INTER_CUBIC)
             
-            keypoints1, descriptors1 = sift.detectAndCompute(adjusted, None)
-            keypoints2, descriptors2 = sift.detectAndCompute(adjusted2, None)
+            # embedder = FaceNet()
+            # print('starting embed')
+            # embedding1 = embedder.embeddings(adjusted)
+            # print('embed 1')
+            # embedding2 = embedder.embeddings(adjusted2)
+            # print('embed 2')
 
-            bf = cv2.BFMatcher()
+            distance = np.linalg.norm(embedding1 - embedding2)
 
-            # Match descriptors from the two images
-            matches = bf.match(descriptors1, descriptors2)
-
-            # Sort the matches by distance (lower is better)
-            matches = sorted(matches, key=lambda x: x.distance)
-
-            # Compute the similarity score as the sum of match distances
-            similarity_score = sum([match.distance for match in matches])
-            print(similarity_score)
+            print(distance)
 
     return
 

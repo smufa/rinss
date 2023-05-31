@@ -68,10 +68,11 @@ class face_recognizer:
         self.face_sub = rospy.Subscriber("face_and_pose", Face, self.image_callback)
         self.delete_sub = rospy.Subscriber("delete_last", Bool, self.delete_callback)
 
-        self.markers_pub = rospy.Publisher('face_markers', MarkerArray, queue_size=1000)
-        self.greet_pub = rospy.Publisher('greet', Greet, queue_size=1000)
+        self.markers_pub = rospy.Publisher('face_markers', MarkerArray, queue_size=10)
+        self.greet_pub = rospy.Publisher('greet', Greet, queue_size=10)
         self.most_wanted_pub = rospy.Publisher('most_wanted', Poster, queue_size=10)
 
+        self.detected_poster_pub = rospy.Publisher('num_of_posters', Int8, queue_size=10)
         self.isposter_srv = rospy.Service('isposter', isIDPoster, self.is_poster)
         self.bridge = CvBridge()
 
@@ -87,7 +88,6 @@ class face_recognizer:
         return isIDPosterResponse(self.known_faces[req.id].isPoster)
 
     def image_callback(self, msg):
-
         try:
             cv2_image = self.bridge.imgmsg_to_cv2(msg.faceImage)
         except CvBridgeError as e:
@@ -102,8 +102,12 @@ class face_recognizer:
 
         recognized = False
         prisoner = None
+        detectedPosters = 0
 
         for i, face_encoding in enumerate(self.known_faces):
+            if face_encoding.isPoster:
+                detectedPosters += 1
+
             truth_array = np.sum(face_recognition.compare_faces(face_encoding.embeddings, encoding))
             #print("compared faces:", i, face_recognition.compare_faces(face_encoding.embeddings, encoding))
             
@@ -156,6 +160,7 @@ class face_recognizer:
 
             self.greet_pub.publish(msgGreet)
 
+        self.detected_poster_pub.publish(detectedPosters)
 
     def add_marker(self, pose, poster):
         new_marker = Marker()

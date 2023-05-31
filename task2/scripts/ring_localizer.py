@@ -15,7 +15,6 @@ from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
 from task2.msg import Poster
 
-
 def distance(p1, p2):
     return np.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
 
@@ -90,22 +89,21 @@ class The_Ring:
 
         self.marker_array = MarkerArray()
         self.ringColor = ""
-        self.prisonLocation = Point()
         self.marker_num = 0
         self.known_rings = []
     
     def ring_color_callback(self, msg):
-        self.ringColor = msg.color
+        self.ringColor = msg.color.data
         self.foundRings()
         return
     
     def foundRings(self):
+        prisonLocation = Point()
         for ring in self.known_rings:
-            if ring.detectedColor == self.ringColor:
-                self.prisonLocation = ring.get_average_pose()
-        
-        self.prison_pub.publish(self.prisonLocation)
-        return
+            if ring.detectedColor.upper() == self.ringColor.upper():
+                prisonLocation = ring.get_average_pose()
+
+        self.prison_pub.publish(prisonLocation)
 
 
     def wait_status(self, msg):
@@ -172,7 +170,7 @@ class The_Ring:
 
         if self.ringColor != "":
             self.foundRings()
-            print(self.prisonLocation)
+            #print(self.prisonLocation)
             
     def timestamp_callback(self, rgb_image, depth_image):
         if self.wait_state: return
@@ -198,6 +196,7 @@ class The_Ring:
         thresh = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 5)
         # cv2.imshow("Image window",thresh)
         # cv2.waitKey(0)
+
         # Extract contours
         contours, hierarchy = cv2.findContours(thresh[0:420, :], cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
 
@@ -227,7 +226,7 @@ class The_Ring:
                 if dist < 5:
                     candidates.append((e1,e2))
 
-        #print("Processing is done! found", len(candidates), "candidates for rings")
+        # print("Processing is done! found", len(candidates), "candidates for rings")
 
         """try:
             depth_img = rospy.wait_for_message('/camera/depth/image_raw', Image)

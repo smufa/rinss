@@ -4,7 +4,8 @@
     <node pkg="task2" type="face_localizer_dlib.py" name="face"/>
     <node pkg="task2" type="face_recognizer.py" name="face_recognize"/>
     <node pkg="task2" type="extract_speech.py" name="speech"/>
-    <!-- <node pkg="task2" type="reidentification.py" name="reidentification"/> -->
+    <node pkg="task2" type="reidentification.py" name="reidentification"/>
+    <node pkg="task2" type="park.py" name="park"/>
     <!-- <node pkg="task2" type="movement.py" name="movement"/> -->
 
 </launch>
