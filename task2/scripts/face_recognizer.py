@@ -150,9 +150,11 @@ class face_recognizer:
 
             self.refresh_markers(len(self.known_faces)-1)
 
-            msg = Greet()
-            msg.id = len(self.known_faces) - 1
-            self.greet_pub.publish(msg)
+            msgGreet = Greet()
+            msgGreet.id = len(self.known_faces) - 1
+            msgGreet.faceLocation = msg.pose.position
+
+            self.greet_pub.publish(msgGreet)
 
 
     def add_marker(self, pose, poster):

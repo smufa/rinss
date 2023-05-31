@@ -268,8 +268,8 @@ class Robot:
     def move(self):
 
         # TEMOPORARY
-        self.state = self.states['cylinder']
-        self.suspicious_locations = [Point(-0.9981273449, -0.3515172701, 0.32473115908), Point(2.809075429450, 2.525695187160, 0.32673843826)]
+        # self.state = self.states['cylinder']
+        # self.suspicious_locations = [Point(-0.9981273449, -0.3515172701, 0.32473115908), Point(2.809075429450, 2.525695187160, 0.32673843826)]
 
         if self.state == self.states['exploring']:
             state = self.movement_client.get_state()
@@ -295,14 +295,46 @@ class Robot:
                     self.generate_goals(16 + self.loop % 5 , self.loop)
                     self.iterator = 0
 
-                print(self.detectedPosters)
-                print(self.numberOfSuspiciousLocations)
                 if self.detectedPosters >= 1 and self.numberOfSuspiciousLocations == 2:
                     self.state = self.states['cylinder']
 
         elif self.state == self.states['greeting']:
 
             duration = rospy.Duration(3) # 1.5
+
+            closest = None
+            min_dist = 99999
+            i = 0
+            closestIndex = 0
+            goal = [self.currentFaceLocation.x, self.currentFaceLocation.y]
+            for x, y in np.vstack([self.xs, self.ys]).T:
+                dist = self.calculate_distance([x, y], goal)*0.3 + self.calculate_distance([x, y], [self.robot_position.x, self.robot_position.y])*0.7
+                if dist < min_dist:
+                    closest = [x, y]
+                    min_dist = dist
+                    closestIndex = i
+                
+                i += 1
+
+            self.movement_client.cancel_all_goals()
+            self.movement_client.wait_for_result()
+
+
+            self.ps.header.stamp = rospy.Time.now()
+            self.ps.pose.position.x = closest[0]
+            self.ps.pose.position.y = closest[1]
+            quaternion = self.quaternion_from_two_points(np.array(closest), np.array([self.currentFaceLocation.x, self.currentFaceLocation.y]))
+
+            self.ps.pose.orientation.x = quaternion[0]
+            self.ps.pose.orientation.y = quaternion[1]
+            self.ps.pose.orientation.z = quaternion[2]
+            self.ps.pose.orientation.w = quaternion[3]
+            
+            self.iterator -= 1
+            goal = MoveBaseGoal()
+            goal.target_pose = self.ps
+            self.movement_client.send_goal_and_wait(goal)
+            self.movement_client.wait_for_result()
 
             twist_msg = Twist()
             while self.distanceToFace > 0.8:
@@ -580,6 +612,7 @@ class Robot:
     def new_face_callback(self, msg):
         self.state = 1
         self.faceID = msg.id
+        self.currentFaceLocation = msg.faceLocation
 
     def all_cylinders_detected(self, msg):
         self.cylinders = msg.data

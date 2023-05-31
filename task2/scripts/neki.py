@@ -1,45 +1,132 @@
 import cv2
+import numpy as np
+
+def compare_faces(img1_path, img2_path):
+    # Load the images
+    img = cv2.imread(img1_path, cv2.IMREAD_GRAYSCALE)
+    wantedImg = cv2.imread(img2_path, cv2.IMREAD_GRAYSCALE)
+
+    face_cascade = cv2.CascadeClassifier('/home/nana/ROS/srcLanTask1/exercise4/scripts/haarcascade_frontalface_default.xml')
+    faces = face_cascade.detectMultiScale(img, scaleFactor=1.01, minNeighbors=10)
+    faces_wanted = face_cascade.detectMultiScale(wantedImg, scaleFactor=1.01, minNeighbors=7)
+    sift = cv2.SIFT_create()
+
+    offset = 10
+    for (x, y, w, h) in faces:
+        # cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 3)
+        adjusted = img[y-offset:y+h+offset,x-offset:x+w+offset]
+
+        # alpha = 3  # contrast:  [0,1) => lower    [1,] => higher
+        # beta = 2   # brightness
+        # adjusted = cv2.convertScaleAbs(adjusted, alpha, beta)
+        height, width = adjusted.shape[:2]
+        size = height * width
+        cv2.imshow('face', adjusted)
+        cv2.waitKey(0)
+
+        for(x2, y2, w2, h2) in faces_wanted:
+            adjusted2 = wantedImg[y2-offset:y2+h2+offset,x2-offset:x2+w2+offset]
+            height2, width2 = adjusted2.shape[:2]
+            size2 = height2 * width2
+            cv2.imshow('face wanted', adjusted2)
+            cv2.waitKey(0)
+
+            if size < size2: #
+                adjusted = cv2.resize(adjusted, (width2, height2), interpolation=cv2.INTER_CUBIC)
+            else:
+                adjusted2 = cv2.resize(adjusted2, (width, height), interpolation=cv2.INTER_CUBIC)
+            
+            keypoints1, descriptors1 = sift.detectAndCompute(adjusted, None)
+            keypoints2, descriptors2 = sift.detectAndCompute(adjusted2, None)
+
+            bf = cv2.BFMatcher()
+
+            # Match descriptors from the two images
+            matches = bf.match(descriptors1, descriptors2)
+
+            # Sort the matches by distance (lower is better)
+            matches = sorted(matches, key=lambda x: x.distance)
+
+            # Compute the similarity score as the sum of match distances
+            similarity_score = sum([match.distance for match in matches])
+            print(similarity_score)
+
+    return
+
+# Paths to the input images
+image1_path = '/home/nana/ROS/src/task2/meshes/neki3.png'
+image2_path = '/home/nana/ROS/src/task2/meshes/wanted1.png'
+
+# Compare the faces and get the similarity score
+similarity_score = compare_faces(image1_path, image2_path)
+
+# Print the similarity score
+print("Similarity score: ", similarity_score)
+
+exit(1)
+
+import cv2
 import face_recognition
 import numpy as np
 
 img = cv2.cvtColor(cv2.imread('/home/nana/ROS/src/task2/meshes/neki3.png'), cv2.COLOR_BGR2GRAY)
-wantedImg = cv2.cvtColor(cv2.imread('/home/nana/ROS/src/task2/meshes/robber3240if0.jpg'), cv2.COLOR_BGR2GRAY)
+wantedImg = cv2.cvtColor(cv2.imread('/home/nana/ROS/src/task2/meshes/wanted1.png'), cv2.COLOR_BGR2GRAY)
 
 face_cascade = cv2.CascadeClassifier('/home/nana/ROS/srcLanTask1/exercise4/scripts/haarcascade_frontalface_default.xml')
 faces = face_cascade.detectMultiScale(img, scaleFactor=1.01, minNeighbors=10)
-offset = 10
+faces_wanted = face_cascade.detectMultiScale(wantedImg, scaleFactor=1.01, minNeighbors=7)
+hog = cv2.HOGDescriptor()
 
+# f = [img[y-offset:y+h+offset,x-offset:x+w+offset] for (x, y, w, h) in faces]
+# fw = [wantedImg[y-offset:y+h+offset,x-offset:x+w+offset] for (x, y, w, h) in faces_wanted]
+
+offset = 10
 for (x, y, w, h) in faces:
     # cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 3)
     adjusted = img[y-offset:y+h+offset,x-offset:x+w+offset]
 
-    alpha = 3  # contrast:  [0,1) => lower    [1,] => higher
-    beta = 2   # brightness
+    # alpha = 3  # contrast:  [0,1) => lower    [1,] => higher
+    # beta = 2   # brightness
     # adjusted = cv2.convertScaleAbs(adjusted, alpha, beta)
     height, width = adjusted.shape[:2]
-
-    cv2.imshow('title', adjusted)
+    size = height * width
+    cv2.imshow('face', adjusted)
     cv2.waitKey(0)
-    cv2.imshow('title', wantedImg)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
 
-    histogram1 = cv2.calcHist([adjusted], [0], None, [256], [0, 256])
-    histogram2 = cv2.calcHist([wantedImg], [0], None, [256], [0, 256])
+    for(x2, y2, w2, h2) in faces_wanted:
+        adjusted2 = wantedImg[y2-offset:y2+h2+offset,x2-offset:x2+w2+offset]
+        height2, width2 = adjusted2.shape[:2]
+        size2 = height2 * width2
+        cv2.imshow('face wanted', adjusted2)
+        cv2.waitKey(0)
 
-    # Normalize the histograms (optional)
-    histogram1 = cv2.normalize(histogram1, histogram1, 0, 1, cv2.NORM_MINMAX)
-    histogram2 = cv2.normalize(histogram2, histogram2, 0, 1, cv2.NORM_MINMAX)
+        if size < size2: #
+            adjusted = cv2.resize(adjusted, (width2, height2), interpolation=cv2.INTER_CUBIC)
+        else:
+            adjusted2 = cv2.resize(adjusted2, (width, height), interpolation=cv2.INTER_CUBIC)
+        
+        features1 = hog.compute(adjusted).flatten()
+        features2 = hog.compute(adjusted2).flatten()
 
-    # Calculate the histogram similarity using the Bhattacharyya coefficient
-    similarity = cv2.compareHist(histogram1, histogram2, cv2.HISTCMP_BHATTACHARYYA)
+        dot_product = np.dot(features1, features2)
+        norm_1 = np.linalg.norm(features1)
+        norm_2 = np.linalg.norm(features2)
+        similarity = dot_product / (norm_1 * norm_2)
 
-    # Display the similarity score
-    print("Histogram Similarity: ", similarity)
+        print("Histogram Similarity: ", similarity)
+        cv2.destroyAllWindows()
+    # histogram1 = cv2.calcHist([adjusted], [0], None, [256], [0, 256])
+    # histogram2 = cv2.calcHist([wantedImg], [0], None, [256], [0, 256])
+
+    # # Normalize the histograms (optional)
+    # histogram1 = cv2.normalize(histogram1, histogram1, 0, 1, cv2.NORM_MINMAX)
+    # histogram2 = cv2.normalize(histogram2, histogram2, 0, 1, cv2.NORM_MINMAX)
+
+    # # Calculate the histogram similarity using the Bhattacharyya coefficient
+    # similarity = cv2.compareHist(histogram1, histogram2, cv2.HISTCMP_BHATTACHARYYA)
 
 
-
-exit(1)
+exit(0)
 
 
 
